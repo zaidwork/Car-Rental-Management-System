@@ -1,0 +1,465 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Helpers
+@using CarRental.Core.Interfaces
+@using CarRental.Infrastructure.Helpers
+@inject IJSRuntime JSRuntime
+@inject IRentalSystemService RentalService
+
+@if (Transaction != null)
+{
+<div class="modal-overlay">
+    <div class="modal-card" style="max-width: @(_printFormat == "80mm" ? "520px" : "860px"); width: 95%;">
+        <div class="modal-header no-print">
+            <div class="modal-title">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-blue)" stroke-width="2">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                <span>طباعة @(Transaction.Type == TransactionType.Receipt ? "سند قبض مالي رسمي" : "سند صرف مالي رسمي") (@Transaction.ReceiptNumber)</span>
+            </div>
+            <button class="btn-close-modal" @onclick="OnClose">×</button>
+        </div>
+
+        <!-- Top Options Bar: Company & Print Mode Switcher (Non-Printable) -->
+        <div class="company-switcher-bar no-print" style="display: flex; gap: 14px; align-items: center; justify-content: space-between; padding: 10px 18px; background: #e8e1d2; border-bottom: 1.5px solid var(--border-color); flex-wrap: wrap;">
+            <!-- 1. Company Switcher -->
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 800; font-size: 0.85rem; color: #451a03;">👑 الترويسة:</span>
+                <div style="display: flex; gap: 6px;">
+                    <button type="button" 
+                            class="filter-pill @(_selectedCompany == "altaj" ? "active" : "")" 
+                            style="cursor: pointer; font-weight: bold; font-size: 0.82rem; border: 1.5px solid @(_selectedCompany == "altaj" ? "#b45309" : "#cbd5e1");"
+                            @onclick='() => _selectedCompany = "altaj"'>
+                        👑 شركة التاج (562514273)
+                    </button>
+                    <button type="button" 
+                            class="filter-pill @(_selectedCompany == "samara" ? "active" : "")" 
+                            style="cursor: pointer; font-weight: bold; font-size: 0.82rem; border: 1.5px solid @(_selectedCompany == "samara" ? "#b45309" : "#cbd5e1");"
+                            @onclick='() => _selectedCompany = "samara"'>
+                        🏢 شركة سمارة (562171389)
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. Print Format Switcher (A4 vs 80mm POS Thermal) -->
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 800; font-size: 0.85rem; color: #1e3a8a;">🖨️ نوع الطباعة:</span>
+                <div style="display: flex; gap: 6px;">
+                    <button type="button" 
+                            class="filter-pill @(_printFormat == "A4" ? "active" : "")" 
+                            style="cursor: pointer; font-weight: 800; font-size: 0.82rem; border: 1.5px solid @(_printFormat == "A4" ? "#0284c7" : "#cbd5e1"); background: @(_printFormat == "A4" ? "#e0f2fe" : "#ffffff");"
+                            @onclick='() => _printFormat = "A4"'>
+                        📄 قياسي A4
+                    </button>
+                    <button type="button" 
+                            class="filter-pill @(_printFormat == "80mm" ? "active" : "")" 
+                            style="cursor: pointer; font-weight: 800; font-size: 0.82rem; border: 1.5px solid @(_printFormat == "80mm" ? "#0284c7" : "#cbd5e1"); background: @(_printFormat == "80mm" ? "#e0f2fe" : "#ffffff");"
+                            @onclick='() => _printFormat = "80mm"'>
+                        🧾 كاشير حراري (80mm)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-body" id="printableVoucherContainer" style="background: #e5ded0; padding: 20px; flex: 1 1 auto; min-height: 0; overflow-y: auto;">
+            
+            @if (_printFormat == "A4")
+            {
+                <!-- ==================== 1. OFFICIAL A4 DOCUMENT ==================== -->
+                <div class="printable-document official-contract-sheet" id="printableVoucherArea" style="background: #ffffff; color: #000000; padding: 24px 28px; border-radius: 4px; font-family: 'Cairo', sans-serif; line-height: 1.6; border: 2px solid #000000; max-width: 800px; margin: 0 auto;">
+                    
+                    <!-- Header with Dual Company Branding -->
+                    <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-bottom: 2px solid #000000; padding-bottom: 10px; margin-bottom: 16px;">
+                        <div style="text-align: right;">
+                            <h2 style="font-size: 1.25rem; font-weight: 900; margin: 0; color: #000000;">@ActiveCompanyNameAr</h2>
+                            <div style="font-size: 0.8rem; font-weight: 700; color: #1e293b;">لتأجير السيارات السياحية</div>
+                            <div style="font-size: 0.78rem;">طوباس - قرب الصحة الجديدة</div>
+                            <div style="font-size: 0.78rem; font-weight: bold;">مشتغل مرخص رقم: @ActiveCompanyDealerNo</div>
+                            <div style="font-size: 0.78rem; font-family: monospace;">هاتف: 05 666 5555 0 | 0566 009 003</div>
+                        </div>
+
+                        <div style="text-align: center; padding: 0 10px;">
+                            @if (_selectedCompany == "altaj")
+                            {
+                                <img src="images/logo.png" alt="TAJ" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 3px;" />
+                            }
+                            else
+                            {
+                                <svg width="36" height="28" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="display: block; margin: 0 auto 2px;">
+                                    <path d="M2 19h20v2H2v-2zm1.2-14L7 9.8 12 4l5 5.8 3.8-4.8.9 11.2H2.3L3.2 5z"/>
+                                </svg>
+                            }
+                            <div style="border: 2px solid #000000; padding: 4px 20px; border-radius: 6px; font-weight: 900; font-size: 1.15rem; background: #ffffff; color: #000000; display: inline-block;">
+                                @(Transaction.Type == TransactionType.Receipt ? "ســنـد قـبــض مــالـي" : "ســنـد صـــرف مــالـي")
+                            </div>
+                            <span style="font-size: 0.72rem; color: #475569; display: block; margin-top: 2px;">
+                                @(Transaction.Type == TransactionType.Receipt ? "Official Receipt Voucher" : "Payment Voucher")
+                            </span>
+                        </div>
+
+                        <div style="text-align: left; font-size: 0.82rem;">
+                            <div><strong>رقم السند:</strong> <span style="font-family: monospace; font-weight: 900; font-size: 1.05rem;">@Transaction.ReceiptNumber</span></div>
+                            <div><strong>التاريخ:</strong> <span style="font-family: monospace; font-weight: bold;">@Transaction.TransactionDateTime.ToString("yyyy/MM/dd")</span></div>
+                            <div><strong>الوقت:</strong> <span style="font-family: monospace; font-weight: bold;">@Transaction.TransactionDateTime.ToString("hh:mm tt")</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Amount Ribbon with Tafqeet -->
+                    <div style="background: #fafafa; border: 1.5px solid #000000; border-radius: 6px; padding: 10px 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-weight: 800; font-size: 0.95rem;">المبلغ بالأرقام:</span>
+                                <span style="font-size: 1.35rem; font-weight: 900; color: #000000; font-family: monospace; background: #ffffff; padding: 2px 14px; border-radius: 4px; border: 1.5px solid #000000;">
+                                    @Transaction.Amount.ToString("N0") ₪
+                                </span>
+                            </div>
+                            <div>
+                                <span style="font-weight: 800;">طريقة الدفع:</span>
+                                <span style="font-weight: 900; margin-right: 6px; border: 1px solid #000; padding: 2px 10px; border-radius: 4px; background: #fff;">
+                                    @PaymentMethodArabic
+                                </span>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; border-top: 1px dashed #cbd5e1; padding-top: 6px; margin-top: 2px;">
+                            <span style="font-weight: 800; font-size: 0.9rem;">المبلغ بالحروف:</span>
+                            <span style="font-weight: 900; color: #000000; font-size: 0.95rem;">
+                                فقط @ArabicNumberHelper.ToArabicWords(Transaction.Amount) لا غير.
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Main Body Fields -->
+                    <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 25px; font-size: 0.9rem;">
+                        <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px;">
+                            <span style="font-weight: 900; width: 140px; flex-shrink: 0;">@(Transaction.Type == TransactionType.Receipt ? "وصلنا من السيد / السادة:" : "صرفنا إلى السيد / السادة:")</span>
+                            <span style="font-weight: 900; font-size: 1rem; color: #000000;">@(Transaction.Customer?.FullName ?? Transaction.PayeeOrVendor ?? "العميل المحترم")</span>
+                            @if (!string.IsNullOrEmpty(Transaction.Customer?.NationalIdOrPassport))
+                            {
+                                <span style="margin-right: 15px; color: #475569; font-size: 0.85rem;">(هوية/جواز: <span style="font-family: monospace;">@Transaction.Customer.NationalIdOrPassport</span>)</span>
+                            }
+                        </div>
+
+                        <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px;">
+                            <span style="font-weight: 900; width: 140px; flex-shrink: 0;">وذلك عن / البيان:</span>
+                            <span style="font-weight: bold; flex: 1;">@(string.IsNullOrEmpty(Transaction.Description) ? (Transaction.Type == TransactionType.Receipt ? "دفعة مالية معتمدة على الحساب" : "مصروف تشغيلي / مالي معتمد") : Transaction.Description)</span>
+                        </div>
+
+                        @if (Transaction.Contract != null)
+                        {
+                            <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px; font-size: 0.85rem;">
+                                <span style="font-weight: 900; width: 140px; flex-shrink: 0;">تفاصيل العقد والمركبة:</span>
+                                <span>
+                                    عقد رقم: <strong>@Transaction.Contract.ContractNumber</strong> | 
+                                    المركبة: <strong>@Transaction.Contract.Vehicle?.Brand @Transaction.Contract.Vehicle?.Model</strong> (لوحة: <span style="font-family: monospace; font-weight: bold;">@Transaction.Contract.Vehicle?.PlateNumber</span>)
+                                </span>
+                            </div>
+                            @if (Transaction.Contract.DiscountAmount > 0)
+                            {
+                                <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px; font-size: 0.85rem; background: #f8fafc; padding: 4px 6px;">
+                                    <span style="font-weight: 900; width: 140px; flex-shrink: 0; color: #166534;">تفاصيل الخصم المالي:</span>
+                                    <span>
+                                        السعر المفترض: <strong style="text-decoration: line-through; color: #64748b;">@Transaction.Contract.OriginalAgreedAmount.ToString("N0") ₪</strong> | 
+                                        الخصم الممنوح: <strong style="color: #dc2626;">-@Transaction.Contract.DiscountAmount.ToString("N0") ₪ @(Transaction.Contract.DiscountType == "Percentage" ? $"({Transaction.Contract.DiscountValue}%)" : "")</strong> | 
+                                        الصافي بعد الخصم: <strong style="color: #166534; font-size: 0.92rem;">@Transaction.Contract.TotalAgreedAmount.ToString("N0") ₪</strong>
+                                    </span>
+                                </div>
+                            }
+                        }
+
+                        @if (!string.IsNullOrEmpty(Transaction.InvoiceNumber))
+                        {
+                            <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px; font-size: 0.85rem;">
+                                <span style="font-weight: 900; width: 140px; flex-shrink: 0;">رقم المرجع / الفاتورة:</span>
+                                <span style="font-family: monospace; font-weight: bold;">@Transaction.InvoiceNumber</span>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Signatures -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; padding-top: 15px; border-top: 1.5px solid #000000;">
+                        <div style="text-align: right;">
+                            <div style="font-weight: 900; margin-bottom: 8px;">توقيع المستلم / المحاسب:</div>
+                            <div style="font-size: 0.85rem; color: #475569; margin-bottom: 35px;">الاسم: @Transaction.StaffUsername</div>
+                            <div style="border-bottom: 1px solid #000000; width: 75%;">التوقيع: </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-weight: 900; margin-bottom: 8px;">توقيع الدافع / العميل:</div>
+                            <div style="font-size: 0.85rem; color: #475569; margin-bottom: 35px;">الاسم: @(Transaction.Customer?.FullName ?? "العميل")</div>
+                            <div style="border-bottom: 1px solid #000000; width: 75%;">التوقيع: </div>
+                        </div>
+                    </div>
+
+                </div>
+            }
+            else
+            {
+                <!-- ==================== 2. COMPACT 80MM POS THERMAL RECEIPT ==================== -->
+                <div class="printable-document thermal-receipt-sheet" id="printableVoucherArea" style="background: #ffffff; color: #000000; width: 310px; max-width: 100%; margin: 0 auto; padding: 14px 12px; font-family: 'Courier New', Courier, monospace, 'Cairo'; font-size: 12px; line-height: 1.45; border: 1.5px dashed #000; border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.15);">
+                    
+                    <!-- Header -->
+                    <div style="text-align: center; margin-bottom: 8px;">
+                        <img src="images/logo.png" alt="TAJ" style="width: 44px; height: 44px; border-radius: 50%; display: block; margin: 0 auto 4px;" />
+                        <div style="font-weight: 900; font-size: 15px; letter-spacing: 0.5px;">@ActiveCompanyNameAr</div>
+                        <div style="font-size: 11px; font-weight: bold;">@ActiveCompanySubtitleEn</div>
+                        <div style="font-size: 10px;">طوباس - قرب الصحة الجديدة</div>
+                        <div style="font-size: 10px;">مشتغل: @ActiveCompanyDealerNo</div>
+                        <div style="font-size: 10px; font-weight: bold;">0566655550 | 0566009003</div>
+                    </div>
+
+                    <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
+
+                    <!-- Voucher Type & Number -->
+                    <div style="text-align: center; margin: 6px 0;">
+                        <div style="font-weight: 900; font-size: 14px; border: 1px solid #000; padding: 2px 8px; display: inline-block;">
+                            @(Transaction.Type == TransactionType.Receipt ? "ســند قـبــض مـالـي" : "ســند صــرف مـالـي")
+                        </div>
+                        <div style="font-size: 12px; font-weight: bold; margin-top: 4px;">رقم: @Transaction.ReceiptNumber</div>
+                        <div style="font-size: 10px; color: #333;">@Transaction.TransactionDateTime.ToString("yyyy/MM/dd hh:mm tt")</div>
+                    </div>
+
+                    <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
+
+                    <!-- Big Bold Amount Box -->
+                    <div style="background: #f4f4f4; border: 1px solid #000; padding: 8px; text-align: center; margin: 6px 0;">
+                        <div style="font-size: 11px; font-weight: bold;">المبلغ المقبوض:</div>
+                        <div style="font-size: 22px; font-weight: 900; font-family: monospace;">@Transaction.Amount.ToString("N0") ₪</div>
+                        <div style="font-size: 10px; font-weight: bold; margin-top: 2px;">
+                            فقط @ArabicNumberHelper.ToArabicWords(Transaction.Amount) لا غير
+                        </div>
+                    </div>
+
+                    <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
+
+                    <!-- Details -->
+                    <div style="font-size: 11px; display: flex; flex-direction: column; gap: 4px; text-align: right;">
+                        <div><strong>العميل:</strong> @(Transaction.Customer?.FullName ?? Transaction.PayeeOrVendor ?? "العميل")</div>
+                        @if (!string.IsNullOrEmpty(Transaction.Customer?.PrimaryPhone))
+                        {
+                            <div><strong>الهاتف:</strong> <span style="font-family: monospace;">@Transaction.Customer.PrimaryPhone</span></div>
+                        }
+                        <div><strong>طريقة الدفع:</strong> @PaymentMethodArabic</div>
+                        <div><strong>البيان:</strong> @(string.IsNullOrEmpty(Transaction.Description) ? "دفعة على الحساب" : Transaction.Description)</div>
+                        @if (Transaction.Contract != null)
+                        {
+                            <div><strong>عقد رقم:</strong> @Transaction.Contract.ContractNumber</div>
+                            <div><strong>السيارة:</strong> @Transaction.Contract.Vehicle?.Brand @Transaction.Contract.Vehicle?.Model (@Transaction.Contract.Vehicle?.PlateNumber)</div>
+                            @if (Transaction.Contract.DiscountAmount > 0)
+                            {
+                                <div style="background: #f1f5f9; padding: 3px 5px; margin: 3px 0; border: 1px dashed #64748b; font-size: 11px;">
+                                    <div><strong>المفترض:</strong> @Transaction.Contract.OriginalAgreedAmount.ToString("N0") ₪</div>
+                                    <div><strong>الخصم:</strong> -@Transaction.Contract.DiscountAmount.ToString("N0") ₪ @(Transaction.Contract.DiscountType == "Percentage" ? $"({Transaction.Contract.DiscountValue}%)" : "")</div>
+                                    <div><strong>الصافي:</strong> @Transaction.Contract.TotalAgreedAmount.ToString("N0") ₪</div>
+                                </div>
+                            }
+                        }
+                    </div>
+
+                    <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
+
+                    <div style="display: flex; justify-content: space-between; font-size: 10px; padding: 0 4px;">
+                        <div>الموظف: @Transaction.StaffUsername</div>
+                        <div>التوقيع: .............</div>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 10px; font-size: 10px; font-weight: bold;">
+                        *** شكراً لتعاملكم معنا ***
+                    </div>
+                </div>
+            }
+
+        </div>
+
+        <!-- WhatsApp Modal Popup (if opened) -->
+        @if (_showWhatsAppModal)
+        {
+            <div style="background: #f0fdf4; border-top: 2px solid #16a34a; padding: 14px 20px; display: flex; flex-direction: column; gap: 10px;" class="no-print">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px; font-weight: 800; color: #166534; font-size: 0.95rem;">
+                        <span>💬 إرسال إشعار السند عبر واتساب (WhatsApp)</span>
+                    </div>
+                    <button type="button" class="btn-close-modal" style="font-size: 1rem;" @onclick="() => _showWhatsAppModal = false">×</button>
+                </div>
+
+                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 0.85rem; font-weight: bold;">مقدمة الدولة:</span>
+                        <button type="button" 
+                                class="filter-pill @(_whatsAppPrefix == "970" ? "active" : "")" 
+                                style="border: 1.5px solid @(_whatsAppPrefix == "970" ? "#16a34a" : "#cbd5e1"); font-weight: 800; font-size: 0.82rem; cursor: pointer;"
+                                @onclick='() => _whatsAppPrefix = "970"'>
+                            🇵🇸 +970 (فلسطين)
+                        </button>
+                        <button type="button" 
+                                class="filter-pill @(_whatsAppPrefix == "972" ? "active" : "")" 
+                                style="border: 1.5px solid @(_whatsAppPrefix == "972" ? "#16a34a" : "#cbd5e1"); font-weight: 800; font-size: 0.82rem; cursor: pointer;"
+                                @onclick='() => _whatsAppPrefix = "972"'>
+                            🇮🇱 +972 (إسرائيل / الداخل)
+                        </button>
+                    </div>
+
+                    <div style="flex: 1; min-width: 180px;">
+                        <input type="text" class="form-control" @bind="_whatsAppPhone" placeholder="رقم الجوال: 05xxxxxxxx" style="direction: ltr; font-weight: bold;" />
+                    </div>
+
+                    <button type="button" class="filter-pill" style="border: 1.5px solid #16a34a; font-weight: bold; background: #fff; cursor: pointer;" @onclick="CopyVoucherWhatsApp">
+                        <span>📋 نسخ نص الرسالة</span>
+                    </button>
+
+                    <button type="button" class="btn-primary-action" style="background: #16a34a; border-color: #15803d;" @onclick="SendVoucherWhatsApp">
+                        <span>🚀 فتح المحادثة والإرسال</span>
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- Footer Actions (Non-Printable) -->
+        <div class="modal-footer no-print" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn-primary-action" style="background: #16a34a; border-color: #15803d; color: #fff;" @onclick="ToggleWhatsAppModal">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                    </svg>
+                    <span>إرسال واتساب للعميل</span>
+                </button>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+                <button class="filter-pill" @onclick="OnClose">إغلاق</button>
+                <button class="btn-primary-action" @onclick="PrintVoucher">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        <rect x="6" y="14" width="12" height="8"></rect>
+                    </svg>
+                    <span>طباعة فورية (@(_printFormat == "80mm" ? "طابعة كاشير 80mm" : "A4"))</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    [Parameter] public FinancialTransaction? Transaction { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string _selectedCompany = "altaj";
+    private string _printFormat = "A4"; // "A4" or "80mm"
+    private bool _showWhatsAppModal = false;
+    private string _whatsAppPrefix = "970"; // "970" or "972"
+    private string _whatsAppPhone = "";
+    private CompanyProfile? _company;
+
+    private string ActiveCompanyNameAr => _selectedCompany == "samara" 
+        ? "شركة سمارة" 
+        : "شركة التاج";
+
+    private string ActiveCompanySubtitleEn => _selectedCompany == "samara" 
+        ? "SAMARA CAR RENTAL" 
+        : "TAJ CAR RENTAL";
+
+    private string ActiveCompanyDealerNo => _selectedCompany == "samara" 
+        ? "562171389" 
+        : "562514273";
+
+    private string PaymentMethodArabic => Transaction?.PaymentMethod switch
+    {
+        PaymentMode.ImmediateCash => "نقداً (Cash)",
+        PaymentMode.BankTransfer => "تحويل بنكي",
+        PaymentMode.CreditCard => "بطاقة ائتمان / فيزا",
+        _ => "مؤجل ذمم"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _company = await RentalService.GetCompanyProfileAsync();
+            if (_company != null && !string.IsNullOrWhiteSpace(_company.CompanyName))
+            {
+                if (_company.CompanyName.Contains("تاج") || _company.CompanyName.ToLower().Contains("taj"))
+                {
+                    _selectedCompany = "altaj";
+                }
+            }
+        }
+        catch { }
+
+        if (Transaction?.Customer != null && !string.IsNullOrWhiteSpace(Transaction.Customer.PrimaryPhone))
+        {
+            _whatsAppPhone = Transaction.Customer.PrimaryPhone;
+        }
+    }
+
+    private void ToggleWhatsAppModal()
+    {
+        _showWhatsAppModal = !_showWhatsAppModal;
+        if (_showWhatsAppModal && string.IsNullOrWhiteSpace(_whatsAppPhone))
+        {
+            _whatsAppPhone = Transaction?.Customer?.PrimaryPhone ?? "";
+        }
+    }
+
+    private string GetVoucherWhatsAppMessage()
+    {
+        if (Transaction == null) return string.Empty;
+
+        var typeStr = Transaction.Type == TransactionType.Receipt ? "سند قبض مالي" : "سند صرف مالي";
+        var custName = Transaction.Customer?.FullName ?? "العميل المحترم";
+        var amountStr = Transaction.Amount.ToString("N0");
+        var words = ArabicNumberHelper.ToArabicWords(Transaction.Amount);
+        var dateStr = Transaction.TransactionDateTime.ToString("yyyy/MM/dd hh:mm tt");
+        var receiptNo = Transaction.ReceiptNumber;
+        var method = PaymentMethodArabic;
+
+        var msg = $"✦ *شركة التـاج لتأجيـر السيـارات* (TAJ SYSTEM) ✦\n" +
+                  $"━━━━━━━━━━━━━━━━━━━━━\n" +
+                  $"مرحباً بك أخي الكريم: *{custName}*\n" +
+                  $"تم توثيق إصدار *{typeStr}* رسمي برقم: *{receiptNo}*\n\n" +
+                  $"▪ *المبلغ:* *{amountStr} ₪* ({words} شيكل)\n" +
+                  $"▪ *طريقة الدفع:* {method}\n" +
+                  $"▪ *تاريخ ووقت المعاملة:* {dateStr}\n";
+
+        if (Transaction.Contract != null)
+        {
+            msg += $"▪ *رقم العقد المرتبط:* {Transaction.Contract.ContractNumber}\n";
+            if (Transaction.Contract.Vehicle != null)
+            {
+                msg += $"▪ *المركبة:* {Transaction.Contract.Vehicle.Brand} {Transaction.Contract.Vehicle.Model} (لوحة: *{Transaction.Contract.Vehicle.PlateNumber}*)\n";
+            }
+        }
+
+        msg += $"━━━━━━━━━━━━━━━━━━━━━\n" +
+               $"شكراً لتعاملكم مع شركة التاج لتأجير السيارات\n" +
+               $"☎ *خدمة العملاء:* 0566655550 | 0566009003";
+
+        return msg;
+    }
+
+    private async Task CopyVoucherWhatsApp()
+    {
+        var msg = GetVoucherWhatsAppMessage();
+        try
+        {
+            System.Windows.Clipboard.SetText(msg);
+            await JSRuntime.InvokeVoidAsync("alert", "تم نسخ نص إشعار السند بنجاح إلى الحافظة! يمكنك لصقها الآن في محادثة واتساب.");
+        }
+        catch { }
+    }
+
+    private void SendVoucherWhatsApp()
+    {
+        if (Transaction == null || string.IsNullOrWhiteSpace(_whatsAppPhone)) return;
+
+        var msg = GetVoucherWhatsAppMessage();
+        WhatsAppHelper.OpenWhatsApp(_whatsAppPhone, _whatsAppPrefix, msg);
+        _showWhatsAppModal = false;
+    }
+
+    private async Task PrintVoucher()
+    {
+        await JSRuntime.InvokeVoidAsync("window.printDocumentArea", "printableVoucherContainer", _printFormat);
+    }
+}

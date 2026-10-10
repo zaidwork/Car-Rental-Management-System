@@ -1,0 +1,365 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Interfaces
+@inject IJSRuntime JSRuntime
+@inject IRentalSystemService RentalService
+
+@if (Vehicle != null)
+{
+<div class="modal-overlay">
+    <div class="modal-card" style="max-width: 960px; max-height: 92vh; display: flex; flex-direction: column;">
+        <div class="modal-header" style="background: linear-gradient(135deg, #1e293b, #0f172a); color: #fff; padding: 18px 24px; border-bottom: 2px solid #334155;">
+            <div class="modal-title" style="display: flex; align-items: center; gap: 12px;">
+                <div style="background: rgba(59, 130, 246, 0.2); border: 1px solid #3b82f6; width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+                    💰
+                </div>
+                <div>
+                    <div style="font-weight: 800; font-size: 1.2rem; color: #f8fafc;">
+                        الملف المالي وسجل النفقات التفصيلي للمركبة
+                    </div>
+                    <div style="font-size: 0.85rem; color: #94a3b8;">
+                        @Vehicle.Brand @Vehicle.Model (@Vehicle.ModelYear) — لوحة: <span style="font-family: monospace; color: #38bdf8; font-weight: bold;">@Vehicle.PlateNumber</span> | عداد: @Vehicle.CurrentOdometer.ToString("N0") كم
+                    </div>
+                </div>
+            </div>
+            <button class="btn-close-modal" @onclick="OnClose" style="color: #94a3b8; font-size: 1.6rem; cursor: pointer; background: transparent; border: none;">×</button>
+        </div>
+
+        <div class="modal-body" style="background: #f8fafc; padding: 22px; overflow-y: auto; flex: 1;">
+            @if (_isLoading)
+            {
+                <div style="text-align: center; padding: 50px; color: #64748b;">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div style="margin-top: 12px; font-weight: bold;">جاري تحميل الحسابات والملف المالي للمركبة...</div>
+                </div>
+            }
+            else
+            {
+                <div class="printable-document" id="printableVehicleDossier" style="background: #ffffff; color: #0f172a; padding: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.06); font-family: 'Cairo', sans-serif; line-height: 1.6; border: 1px solid #e2e8f0;">
+                    
+                    <!-- Official Header -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 18px;">
+                        <div style="text-align: right;">
+                            <h2 style="font-size: 1.25rem; font-weight: 800; margin: 0; color: #0f172a;">@(_company?.CompanyName ?? "مكتب تأجير السيارات المعتمد")</h2>
+                            <div style="font-size: 0.82rem; color: #475569;">سجل تجاري: @(_company?.CommercialRegisterNumber ?? "2026/CR") | هاتف: @(_company?.PrimaryPhone ?? "")</div>
+                            <div style="font-size: 0.82rem; color: #475569;">@(_company?.Address ?? "")</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="border: 2px solid #0f172a; padding: 6px 20px; border-radius: 6px; font-weight: 800; font-size: 1.15rem; background: #f1f5f9; color: #0f172a;">
+                                كشف الحساب والملف المالي للمركبة
+                            </div>
+                            <span style="font-size: 0.78rem; color: #64748b; display: block; margin-top: 2px;">Vehicle Financial Dossier & Ledger</span>
+                        </div>
+                        <div style="text-align: left; font-size: 0.84rem;">
+                            <div><strong>تاريخ التقرير:</strong> DateTime.Now.ToString("yyyy/MM/dd")</div>
+                            <div><strong>الوقت:</strong> DateTime.Now.ToString("hh:mm tt")</div>
+                        </div>
+                    </div>
+
+                    <!-- Vehicle Specification Card -->
+                    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 16px; margin-bottom: 18px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; font-size: 0.86rem;">
+                        <div><span style="color: #64748b;">المركبة:</span> <strong>@Vehicle.Brand @Vehicle.Model (@Vehicle.ModelYear)</strong></div>
+                        <div><span style="color: #64748b;">رقم اللوحة:</span> <strong style="font-family: monospace; color: #0284c7;">@Vehicle.PlateNumber</strong></div>
+                        <div><span style="color: #64748b;">العداد الحالي:</span> <strong>@Vehicle.CurrentOdometer.ToString("N0") كم</strong></div>
+                        <div><span style="color: #64748b;">الحالة التشغيلية:</span> 
+                            <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; background: @(Vehicle.Status == VehicleStatus.Available ? "#dcfce7; color: #166534;" : (Vehicle.Status == VehicleStatus.Rented ? "#e0f2fe; color: #0369a1;" : "#fee2e2; color: #991b1b;"))">
+                                @(Vehicle.Status == VehicleStatus.Available ? "متاحة" : (Vehicle.Status == VehicleStatus.Rented ? "مؤجرة" : "في الصيانة"))
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Financial Master KPIs -->
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; text-align: center;">
+                        <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 12px;">
+                            <div style="font-size: 0.82rem; color: #166534; font-weight: bold;">إجمالي الإيرادات المحققة</div>
+                            <div style="font-size: 1.35rem; font-weight: 900; color: #15803d;">@TotalRevenue.ToString("N0") ₪</div>
+                            <div style="font-size: 0.72rem; color: #16a34a; margin-top: 3px;">من الإيجارات والتمديدات</div>
+                        </div>
+
+                        <div style="background: #fef2f2; border: 1.5px solid #fca5a5; border-radius: 8px; padding: 12px;">
+                            <div style="font-size: 0.82rem; color: #991b1b; font-weight: bold;">إجمالي المصاريف والنفقات</div>
+                            <div style="font-size: 1.35rem; font-weight: 900; color: #b91c1c;">@TotalExpenses.ToString("N0") ₪</div>
+                            <div style="font-size: 0.72rem; color: #dc2626; margin-top: 3px;">صيانة، غسيل، تأمين، ترخيص، قطع</div>
+                        </div>
+
+                        <div style="background: @(NetProfit >= 0 ? "#eff6ff" : "#fff1f2"); border: 1.5px solid @(NetProfit >= 0 ? "#93c5fd" : "#fecdd3"); border-radius: 8px; padding: 12px;">
+                            <div style="font-size: 0.82rem; color: @(NetProfit >= 0 ? "#1e40af" : "#9f1239"); font-weight: bold;">صافي الربح التشغيلي</div>
+                            <div style="font-size: 1.4rem; font-weight: 900; color: @(NetProfit >= 0 ? "#2563eb" : "#e11d48");">@NetProfit.ToString("N0") ₪</div>
+                            <div style="font-size: 0.72rem; color: @(NetProfit >= 0 ? "#3b82f6" : "#f43f5e"); margin-top: 3px;">
+                                @(NetProfit >= 0 ? "أرباح إيجابية محققة ✓" : "عجز مصاريف تفوق العائد")
+                            </div>
+                        </div>
+
+                        <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px;">
+                            <div style="font-size: 0.82rem; color: #475569; font-weight: bold;">عدد الحركات المالية</div>
+                            <div style="font-size: 1.35rem; font-weight: 900; color: #0f172a;">@_transactions.Count</div>
+                            <div style="font-size: 0.72rem; color: #64748b; margin-top: 3px;">سندات قبض وصرف مسجلة</div>
+                        </div>
+                    </div>
+
+                    <!-- Expenses Breakdown Summary -->
+                    <div style="background: #fdfefe; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 22px;">
+                        <div style="font-size: 0.88rem; font-weight: 800; color: #334155; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>📊 تفصيل بنود المصاريف والنفقات على المركبة:</span>
+                            <span style="font-size: 0.8rem; color: #64748b;">(مجموع المصاريف: @TotalExpenses.ToString("N0") ₪)</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; text-align: center;">
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;">
+                                <div style="font-size: 0.75rem; color: #64748b;">🔧 صيانة وتصليح</div>
+                                <div style="font-weight: 800; color: #b91c1c; font-size: 0.95rem;">@ExpenseMaintenance.ToString("N0") ₪</div>
+                            </div>
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;">
+                                <div style="font-size: 0.75rem; color: #64748b;">🧼 غسيل وتنظيف</div>
+                                <div style="font-weight: 800; color: #0284c7; font-size: 0.95rem;">@ExpenseWash.ToString("N0") ₪</div>
+                            </div>
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;">
+                                <div style="font-size: 0.75rem; color: #64748b;">🛡️ تأمين المركبة</div>
+                                <div style="font-weight: 800; color: #7c3aed; font-size: 0.95rem;">@ExpenseInsurance.ToString("N0") ₪</div>
+                            </div>
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;">
+                                <div style="font-size: 0.75rem; color: #64748b;">📋 ترخيص ودينامو</div>
+                                <div style="font-weight: 800; color: #d97706; font-size: 0.95rem;">@ExpenseLicensing.ToString("N0") ₪</div>
+                            </div>
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;">
+                                <div style="font-size: 0.75rem; color: #64748b;">⚙️ قطع غيار</div>
+                                <div style="font-weight: 800; color: #be123c; font-size: 0.95rem;">@ExpenseParts.ToString("N0") ₪</div>
+                            </div>
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px;">
+                                <div style="font-size: 0.75rem; color: #64748b;">⛽ وقود ومحروقات</div>
+                                <div style="font-weight: 800; color: #475569; font-size: 0.95rem;">@ExpenseFuel.ToString("N0") ₪</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Controls (Non-Printable) -->
+                    <div class="d-print-none" style="display: flex; gap: 12px; margin-bottom: 14px; align-items: center; background: #f1f5f9; padding: 10px 14px; border-radius: 6px;">
+                        <span style="font-weight: bold; font-size: 0.85rem; color: #475569;">تصفية الحركات:</span>
+                        <select @bind="_filterType" style="padding: 5px 10px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 0.85rem;">
+                            <option value="All">جميع الحركات (قبض وصرف)</option>
+                            <option value="Receipt">المقبوضات والإيرادات فقط (قبض)</option>
+                            <option value="Payment">المصاريف والنفقات فقط (صرف)</option>
+                        </select>
+
+                        <select @bind="_filterCategory" style="padding: 5px 10px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 0.85rem;">
+                            <option value="All">جميع التصنيفات</option>
+                            <option value="@TransactionCategory.RentalPayment">إيجار سيارات</option>
+                            <option value="@TransactionCategory.ContractExtension">تمديد عقود</option>
+                            <option value="@TransactionCategory.CarMaintenance">صيانة وإصلاحات</option>
+                            <option value="@TransactionCategory.CarWash">غسيل وتنظيف</option>
+                            <option value="@TransactionCategory.CarInsurance">تأمين المركبة</option>
+                            <option value="@TransactionCategory.CarLicensing">ترخيص وديناموميتر</option>
+                            <option value="@TransactionCategory.SpareParts">قطع غيار</option>
+                            <option value="@TransactionCategory.Fuel">وقود ومحروقات</option>
+                        </select>
+
+                        <span style="font-size: 0.8rem; color: #64748b; margin-right: auto;">
+                            المعروض: @FilteredTransactions.Count حركة مالية
+                        </span>
+                    </div>
+
+                    <!-- Chronological Ledger Table -->
+                    <h3 style="font-size: 0.95rem; font-weight: 800; border-bottom: 1.5px solid #0f172a; padding-bottom: 4px; margin-bottom: 8px;">
+                        سجل العمليات المالية وسندات الصرف والقبض التفصيلية:
+                    </h3>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.83rem; text-align: center;">
+                        <thead>
+                            <tr style="background: #e2e8f0; font-weight: bold; color: #0f172a;">
+                                <th style="padding: 7px; border: 1px solid #cbd5e1;">رقم السند</th>
+                                <th style="padding: 7px; border: 1px solid #cbd5e1;">التاريخ والوقت</th>
+                                <th style="padding: 7px; border: 1px solid #cbd5e1;">نوع الحركة</th>
+                                <th style="padding: 7px; border: 1px solid #cbd5e1;">التصنيف</th>
+                                <th style="padding: 7px; border: 1px solid #cbd5e1;">المستفيد / الورشة / المغسلة</th>
+                                <th style="padding: 7px; border: 1px solid #cbd5e1;">رقم الفاتورة</th>
+                                <th style="padding: 7px; border: 1px solid #cbd5e1;">المبلغ</th>
+                                <th style="padding: 7px; border: 1px solid #cbd5e1;">طريقة الدفع</th>
+                                <th style="padding: 7px; border: 1px solid #cbd5e1;">الموظف</th>
+                                <th style="padding: 7px; border: 1px solid #cbd5e1; text-align: right;">البيان والملاحظات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (FilteredTransactions.Any())
+                            {
+                                @foreach (var t in FilteredTransactions)
+                                {
+                                    <tr style="border-bottom: 1px solid #e2e8f0; background: @(t.Type == TransactionType.Receipt ? "#f0fdf4" : "#ffffff");">
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-family: monospace; font-weight: bold;">@t.ReceiptNumber</td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-size: 0.78rem;">@t.TransactionDateTime.ToString("yyyy/MM/dd HH:mm")</td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0;">
+                                            @if (t.Type == TransactionType.Receipt)
+                                            {
+                                                <span style="color: #16a34a; font-weight: bold; background: #dcfce7; padding: 2px 6px; border-radius: 4px; font-size: 0.78rem;">قبض (إيراد)</span>
+                                            }
+                                            else
+                                            {
+                                                <span style="color: #dc2626; font-weight: bold; background: #fee2e2; padding: 2px 6px; border-radius: 4px; font-size: 0.78rem;">صرف (مصروف)</span>
+                                            }
+                                        </td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-weight: bold; font-size: 0.8rem;">
+                                            @GetCategoryName(t.Category)
+                                        </td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-weight: bold; color: #1e293b;">
+                                            @(string.IsNullOrWhiteSpace(t.PayeeOrVendor) ? "-" : t.PayeeOrVendor)
+                                        </td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-family: monospace; font-size: 0.8rem;">
+                                            @(string.IsNullOrWhiteSpace(t.InvoiceNumber) ? "-" : t.InvoiceNumber)
+                                        </td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-weight: 800; font-size: 0.88rem; color: @(t.Type == TransactionType.Receipt ? "#16a34a" : "#dc2626");">
+                                            @(t.Type == TransactionType.Receipt ? "+" : "-")@t.Amount.ToString("N0") ₪
+                                        </td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-size: 0.78rem;">
+                                            @GetPaymentMethodName(t.PaymentMethod)
+                                        </td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-size: 0.78rem;">@t.StaffUsername</td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; text-align: right; font-size: 0.8rem; color: #475569;">
+                                            @t.Description
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="10" style="padding: 25px; color: #64748b; font-size: 0.9rem;">
+                                        لا توجد حركات مالية مطابقة لمعايير البحث الحالية
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <div class="modal-footer" style="padding: 14px 24px; background: #f1f5f9; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+            <button class="filter-pill" @onclick="OnClose" style="padding: 8px 18px; border-radius: 6px; background: #e2e8f0; border: none; font-weight: bold; cursor: pointer;">
+                إغلاق النافذة
+            </button>
+            <button class="btn-primary-action" @onclick="PrintDossier" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; padding: 9px 22px; border-radius: 6px; font-weight: bold; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                <span>طباعة الكشف المالي الرسمي (A4)</span>
+            </button>
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    [Parameter] public Vehicle? Vehicle { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<FinancialTransaction> _transactions = new();
+    private CompanyProfile? _company;
+    private bool _isLoading = true;
+    private string _filterType = "All";
+    private string _filterCategory = "All";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Vehicle != null)
+        {
+            _isLoading = true;
+            try
+            {
+                _company = await RentalService.GetCompanyProfileAsync();
+                _transactions = await RentalService.GetVehicleTransactionsAsync(Vehicle.Id);
+            }
+            finally
+            {
+                _isLoading = false;
+            }
+        }
+    }
+
+    private decimal TotalRevenue => _transactions
+        .Where(t => t.Type == TransactionType.Receipt)
+        .Sum(t => t.Amount);
+
+    private decimal TotalExpenses => _transactions
+        .Where(t => t.Type == TransactionType.Payment)
+        .Sum(t => t.Amount);
+
+    private decimal NetProfit => TotalRevenue - TotalExpenses;
+
+    private decimal ExpenseMaintenance => _transactions
+        .Where(t => t.Type == TransactionType.Payment && t.Category == TransactionCategory.CarMaintenance)
+        .Sum(t => t.Amount);
+
+    private decimal ExpenseWash => _transactions
+        .Where(t => t.Type == TransactionType.Payment && t.Category == TransactionCategory.CarWash)
+        .Sum(t => t.Amount);
+
+    private decimal ExpenseInsurance => _transactions
+        .Where(t => t.Type == TransactionType.Payment && t.Category == TransactionCategory.CarInsurance)
+        .Sum(t => t.Amount);
+
+    private decimal ExpenseLicensing => _transactions
+        .Where(t => t.Type == TransactionType.Payment && t.Category == TransactionCategory.CarLicensing)
+        .Sum(t => t.Amount);
+
+    private decimal ExpenseParts => _transactions
+        .Where(t => t.Type == TransactionType.Payment && t.Category == TransactionCategory.SpareParts)
+        .Sum(t => t.Amount);
+
+    private decimal ExpenseFuel => _transactions
+        .Where(t => t.Type == TransactionType.Payment && t.Category == TransactionCategory.Fuel)
+        .Sum(t => t.Amount);
+
+    private List<FinancialTransaction> FilteredTransactions
+    {
+        get
+        {
+            var q = _transactions.AsEnumerable();
+
+            if (_filterType == "Receipt")
+                q = q.Where(t => t.Type == TransactionType.Receipt);
+            else if (_filterType == "Payment")
+                q = q.Where(t => t.Type == TransactionType.Payment);
+
+            if (_filterCategory != "All" && Enum.TryParse<TransactionCategory>(_filterCategory, out var cat))
+                q = q.Where(t => t.Category == cat);
+
+            return q.ToList();
+        }
+    }
+
+    private async Task PrintDossier()
+    {
+        await JSRuntime.InvokeVoidAsync("window.print");
+    }
+
+    private string GetCategoryName(TransactionCategory cat)
+    {
+        return cat switch
+        {
+            TransactionCategory.RentalPayment => "إيجار سيارة",
+            TransactionCategory.ContractExtension => "تمديد عقد إيجار",
+            TransactionCategory.CarMaintenance => "صيانة وتصليح",
+            TransactionCategory.CarWash => "غسيل وتنظيف",
+            TransactionCategory.CarInsurance => "تأمين مركبة",
+            TransactionCategory.CarLicensing => "ترخيص وديناموميتر",
+            TransactionCategory.SpareParts => "قطع غيار ومستلزمات",
+            TransactionCategory.Fuel => "وقود ومحروقات",
+            TransactionCategory.TrafficViolation => "مخالفة مرورية",
+            TransactionCategory.DamageCompensation => "تعويض أضرار",
+            TransactionCategory.SecurityDeposit => "تأمين مسترد",
+            TransactionCategory.DebtPayment => "سداد ديون",
+            _ => "مصاريف أخرى"
+        };
+    }
+
+    private string GetPaymentMethodName(PaymentMode mode)
+    {
+        return mode switch
+        {
+            PaymentMode.ImmediateCash => "نقدي (كاش)",
+            PaymentMode.CreditCard => "بطاقة ائتمان / فيزا",
+            PaymentMode.BankTransfer => "حوالة بنكية",
+            PaymentMode.DeferredOnReturn => "آجل / عند الإعادة",
+            _ => "نقدي"
+        };
+    }
+}

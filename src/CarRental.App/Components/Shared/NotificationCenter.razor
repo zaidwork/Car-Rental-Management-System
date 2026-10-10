@@ -1,0 +1,1016 @@
+@using CarRental.Core.Interfaces
+@inject INotificationService NotificationService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<div class="notification-center-container">
+    <!-- Notification Bell Trigger Button -->
+    <button class="btn-notification-bell @(NotificationService.UnreadCount > 0 ? "has-unread" : "")" 
+            @onclick="ToggleDropdown" 
+            title="مركز الإشعارات والتنبيهات الذكية (@(NotificationService.UnreadCount) تنبيه)">
+        <div class="bell-icon-wrapper">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            @if (NotificationService.UnreadCount > 0)
+            {
+                <span class="bell-badge-count @(NotificationService.DangerCount > 0 ? "badge-danger" : "badge-warning")">
+                    @(NotificationService.UnreadCount > 99 ? "99+" : NotificationService.UnreadCount.ToString())
+                </span>
+            }
+        </div>
+        <span class="bell-label-text">التنبيهات</span>
+        @if (NotificationService.UnreadCount > 0)
+        {
+            <span class="bell-live-pill @(NotificationService.DangerCount > 0 ? "pill-danger" : "pill-warning")">
+                @NotificationService.UnreadCount
+            </span>
+        }
+    </button>
+
+    <!-- Dropdown Backdrop to close on outside click -->
+    @if (_isOpen)
+    {
+        <div class="notif-backdrop" @onclick="CloseDropdown"></div>
+
+        <div class="notif-dropdown-panel animate-slide-down">
+            <!-- Header -->
+            <div class="notif-panel-header">
+                <div class="notif-header-title-row">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="notif-header-icon">🔔</span>
+                        <div>
+                            <h3 class="notif-title">مركز الإشعارات والتنبيهات الذكية</h3>
+                            <p class="notif-subtitle">
+                                @if (NotificationService.UnreadCount > 0)
+                                {
+                                    <span style="color: #dc2626; font-weight: 700;">@NotificationService.UnreadCount تنبيه بحاجة لمتابعتك</span>
+                                    @if (NotificationService.DangerCount > 0)
+                                    {
+                                        <span style="color: #991b1b; font-size: 0.76rem; margin-right: 6px;">(@NotificationService.DangerCount عاجل وحرج 🚨)</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span style="color: #16a34a; font-weight: 700;">جميع الأمور مستقرة وسليمة ✓</span>
+                                }
+                            </p>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <!-- Mute / Unmute Button -->
+                        <button class="btn-notif-action @(_isMuted ? "muted" : "active-sound")" 
+                                @onclick="ToggleSoundMute" 
+                                title="@(_isMuted ? "الأصوات مكتومة - انقر للتفعيل" : "الأصوات مفعلة - انقر للكتم")">
+                            @if (_isMuted)
+                            {
+                                <span>🔇 مكتوم</span>
+                            }
+                            else
+                            {
+                                <span>🔊 نغمات</span>
+                            }
+                        </button>
+
+                        <!-- Mark All As Read -->
+                        @if (NotificationService.UnreadCount > 0)
+                        {
+                            <button class="btn-notif-action" @onclick="MarkAllRead" title="تحديد كافة التنبيهات كمقروءة">
+                                ✓ قراءة الكل
+                            </button>
+                        }
+
+                        <button class="btn-notif-close" @onclick="CloseDropdown" title="إغلاق">✕</button>
+                    </div>
+                </div>
+
+                <!-- Sound Audition Menu Toggle -->
+                <div class="sound-test-strip">
+                    <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted);">🎵 تجربة نغمات التنبيه والسيارة:</span>
+                    <div class="sound-chips-container">
+                        <button class="sound-chip chip-car" @onclick='() => PlaySound("engine_start")' title="صوت إقلاع المحرك عند الدخول">
+                            🚗 تشغيل محرك
+                        </button>
+                        <button class="sound-chip chip-car" @onclick='() => PlaySound("engine_stop")' title="صوت إيقاف المحرك وإقفال السيارة">
+                            🔒 إطفاء وقفل
+                        </button>
+                        <button class="sound-chip chip-danger" @onclick='() => PlaySound("danger")' title="نغمة الإنذار العاجل والخطر">
+                            🚨 خطر وعاجل
+                        </button>
+                        <button class="sound-chip chip-warning" @onclick='() => PlaySound("warning")' title="نغمة التحذير والتذكير">
+                            ⚠️ تحذير ورخصة
+                        </button>
+                        <button class="sound-chip chip-maint" @onclick='() => PlaySound("maintenance")' title="نغمة صيانة وغيار الزيت">
+                            🔧 صيانة وزيت
+                        </button>
+                        <button class="sound-chip chip-info" @onclick='() => PlaySound("info")' title="نغمة تنبيه لطيفة">
+                            🔔 إشعار لطيف
+                        </button>
+                        <button class="sound-chip chip-horn" @onclick='() => PlaySound("horn")' title="صوت بوري سيارة لطيف">
+                            📯 بوري سيارة
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Category Filters Tabs -->
+                <div class="notif-filter-tabs">
+                    <button class="notif-tab @(_activeTab == "all" ? "active" : "")" @onclick='() => _activeTab = "all"'>
+                        الكل (@NotificationService.TotalCount)
+                    </button>
+                    <button class="notif-tab @(_activeTab == "danger" ? "active" : "")" @onclick='() => _activeTab = "danger"'>
+                        🚨 عاجل وحرج (@FilteredCount("danger"))
+                    </button>
+                    <button class="notif-tab @(_activeTab == "maintenance" ? "active" : "")" @onclick='() => _activeTab = "maintenance"'>
+                        🔧 صيانة وتراخيص (@FilteredCount("maintenance"))
+                    </button>
+                    <button class="notif-tab @(_activeTab == "contracts" ? "active" : "")" @onclick='() => _activeTab = "contracts"'>
+                        📑 العقود والتنبيهات (@FilteredCount("contracts"))
+                    </button>
+                </div>
+            </div>
+
+            <!-- List Body -->
+            <div class="notif-panel-body">
+                @if (FilteredNotifications.Any())
+                {
+                    <div class="notif-items-list">
+                        @foreach (var item in FilteredNotifications)
+                        {
+                            <div class="notif-card @(item.IsRead ? "is-read" : "is-unread") severity-@(item.Severity.ToString().ToLower())"
+                                 @onclick="() => HandleNotificationClick(item)">
+                                
+                                <div class="notif-card-header">
+                                    <div class="notif-card-left">
+                                        <div class="notif-severity-icon severity-icon-@(item.Severity.ToString().ToLower())">
+                                            @GetCategoryIcon(item.Category)
+                                        </div>
+                                        <div>
+                                            <div class="notif-item-title">
+                                                @item.Title
+                                                @if (!item.IsRead)
+                                                {
+                                                    <span class="new-dot-indicator" title="تنبيه جديد غير مقروء"></span>
+                                                }
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(item.BadgeLabel))
+                                            {
+                                                <span class="notif-meta-pill pill-@(item.Severity.ToString().ToLower())">
+                                                    @item.BadgeLabel
+                                                </span>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    <div class="notif-card-actions" @onclick:stopPropagation="true">
+                                        <!-- Test this specific sound -->
+                                        <button class="btn-play-tone" @onclick="() => PlaySound(item.SoundType)" title="استمع لنغمة هذا التنبيه">
+                                            🔊
+                                        </button>
+                                        <!-- Mark single as read -->
+                                        @if (!item.IsRead)
+                                        {
+                                            <button class="btn-mark-read" @onclick="() => NotificationService.MarkAsRead(item.Id)" title="تحديد كمقروء">
+                                                ✓
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+
+                                <!-- Explanation Box (توضيح للإشعار) -->
+                                <div class="notif-explanation-box">
+                                    <div class="explanation-title">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                                        </svg>
+                                        <span>توضيح الإشعار والتفاصيل:</span>
+                                    </div>
+                                    <div class="explanation-content">
+                                        @foreach (var line in item.Description.Split('\n'))
+                                        {
+                                            <div>@line</div>
+                                        }
+                                    </div>
+                                </div>
+
+                                <!-- Card Footer: Action button that navigates directly to the target page -->
+                                <div class="notif-card-footer">
+                                    <span class="notif-time-ago">
+                                        📅 @FormatTimeAgo(item.CreatedAt)
+                                    </span>
+
+                                    <button class="btn-navigate-target" @onclick="() => HandleNotificationClick(item)">
+                                        <span>@item.ActionLabel</span>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <line x1="7" y1="17" x2="17" y2="7"></line>
+                                            <polyline points="7 7 17 7 17 17"></polyline>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="notif-empty-state">
+                        <div class="empty-icon-circle">✓</div>
+                        <h4>لا توجد أي تنبيهات أو إشعارات هنا</h4>
+                        <p>كافة العمليات والمركبات والعقود تعمل بانتظام وبحالة سليمة ومحدثة تماماً.</p>
+                    </div>
+                }
+            </div>
+
+            <!-- Footer -->
+            <div class="notif-panel-footer">
+                <button class="btn-footer-refresh" @onclick="RefreshData">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+                    </svg>
+                    <span>فحص وتحديث التنبيهات الآن</span>
+                </button>
+                <span style="font-size: 0.74rem; color: var(--text-muted);">
+                    النظام يتحقق تلقائياً من العقود المتأخرة والصيانة ورخص المركبات
+                </span>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .notification-center-container {
+        position: relative;
+        display: inline-block;
+        font-family: var(--font-family);
+        z-index: 1001;
+    }
+
+    /* Trigger Bell Button */
+    .btn-notification-bell {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #ffffff;
+        border: 1.5px solid var(--border-color);
+        border-radius: 20px;
+        padding: 6px 14px;
+        color: var(--text-main);
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        font-weight: 700;
+        font-size: 0.84rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        user-select: none;
+        position: relative;
+        z-index: 10001;
+    }
+
+    .btn-notification-bell:hover {
+        background: #fbf7ee;
+        border-color: var(--accent-gold);
+        transform: translateY(-1px);
+        box-shadow: 0 3px 10px rgba(197, 155, 39, 0.15);
+    }
+
+    .btn-notification-bell.has-unread {
+        border-color: #fca5a5;
+        background: #fff5f5;
+        color: #991b1b;
+    }
+
+    .bell-icon-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .bell-badge-count {
+        position: absolute;
+        top: -6px;
+        right: -8px;
+        color: #ffffff;
+        font-size: 0.65rem;
+        font-weight: 800;
+        border-radius: 10px;
+        min-width: 17px;
+        height: 17px;
+        padding: 0 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+        animation: pulseBadge 1.8s infinite;
+    }
+
+    .badge-danger {
+        background: #ef4444;
+    }
+
+    .badge-warning {
+        background: #f59e0b;
+    }
+
+    @@keyframes pulseBadge {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.15); box-shadow: 0 0 12px rgba(239, 68, 68, 0.6); }
+    }
+
+    .bell-live-pill {
+        font-size: 0.72rem;
+        font-weight: 800;
+        padding: 2px 7px;
+        border-radius: 10px;
+        color: #ffffff;
+    }
+
+    .pill-danger {
+        background: #dc2626;
+    }
+
+    .pill-warning {
+        background: #d97706;
+    }
+
+    /* Backdrop */
+    .notif-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 9998;
+        background: rgba(0, 0, 0, 0.12);
+        cursor: default;
+    }
+
+    /* Dropdown Panel */
+    .notif-dropdown-panel {
+        position: absolute;
+        top: calc(100% + 10px);
+        left: 0; /* RTL alignment */
+        width: 480px;
+        max-width: calc(100vw - 32px);
+        background: #ffffff;
+        border: 2px solid var(--border-color);
+        border-radius: 18px;
+        box-shadow: 0 20px 45px rgba(50, 40, 20, 0.22), 0 6px 16px rgba(0, 0, 0, 0.08);
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        direction: rtl;
+    }
+
+    .animate-slide-down {
+        animation: slideDownFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @@keyframes slideDownFade {
+        from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Header */
+    .notif-panel-header {
+        padding: 16px 18px 12px;
+        background: #fdfaf4;
+        border-bottom: 1.5px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .notif-header-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .notif-header-icon {
+        font-size: 1.4rem;
+    }
+
+    .notif-title {
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: var(--text-main);
+        margin: 0;
+    }
+
+    .notif-subtitle {
+        font-size: 0.8rem;
+        margin: 2px 0 0;
+    }
+
+    .btn-notif-action {
+        background: #ffffff;
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        padding: 4px 10px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: var(--text-main);
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .btn-notif-action:hover {
+        background: #f4ede1;
+        border-color: var(--accent-gold);
+    }
+
+    .btn-notif-action.active-sound {
+        color: #0284c7;
+        background: #e0f2fe;
+        border-color: #bae6fd;
+    }
+
+    .btn-notif-action.muted {
+        color: #64748b;
+        background: #f1f5f9;
+    }
+
+    .btn-notif-close {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        font-size: 1.1rem;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 8px;
+    }
+
+    .btn-notif-close:hover {
+        background: #fee2e2;
+        color: #ef4444;
+    }
+
+    /* Sound Test Strip */
+    .sound-test-strip {
+        background: #ffffff;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 8px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .sound-chips-container {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+
+    .sound-chip {
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 3px 8px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        cursor: pointer;
+        background: #f8fafc;
+        color: var(--text-main);
+        transition: all 0.12s ease;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .sound-chip:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    }
+
+    .sound-chip.chip-car {
+        background: #fef3c7;
+        border-color: #fde047;
+        color: #854d0e;
+    }
+
+    .sound-chip.chip-danger {
+        background: #fee2e2;
+        border-color: #fca5a5;
+        color: #991b1b;
+    }
+
+    .sound-chip.chip-warning {
+        background: #ffedd5;
+        border-color: #fdba74;
+        color: #9a3412;
+    }
+
+    .sound-chip.chip-maint {
+        background: #e0f2fe;
+        border-color: #bae6fd;
+        color: #0369a1;
+    }
+
+    .sound-chip.chip-info {
+        background: #f3e8ff;
+        border-color: #d8b4fe;
+        color: #6b21a8;
+    }
+
+    .sound-chip.chip-horn {
+        background: #ecfdf5;
+        border-color: #a7f3d0;
+        color: #065f46;
+    }
+
+    /* Category Filter Tabs */
+    .notif-filter-tabs {
+        display: flex;
+        gap: 6px;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 2px;
+    }
+
+    .notif-tab {
+        background: transparent;
+        border: none;
+        border-bottom: 2.5px solid transparent;
+        padding: 5px 10px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .notif-tab:hover {
+        color: var(--text-main);
+    }
+
+    .notif-tab.active {
+        color: var(--accent-gold);
+        border-bottom-color: var(--accent-gold);
+        font-weight: 800;
+    }
+
+    /* List Body */
+    .notif-panel-body {
+        max-height: 420px;
+        overflow-y: auto;
+        padding: 12px 14px;
+        background: #ffffff;
+    }
+
+    .notif-items-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    /* Notification Card */
+    .notif-card {
+        background: #ffffff;
+        border: 1.5px solid var(--border-color);
+        border-radius: 14px;
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        transition: all 0.18s ease;
+        cursor: pointer;
+        position: relative;
+    }
+
+    .notif-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07);
+        border-color: var(--accent-gold);
+    }
+
+    .notif-card.is-unread {
+        background: #fffdfa;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    }
+
+    .notif-card.is-read {
+        opacity: 0.85;
+        background: #fbfbfb;
+    }
+
+    .notif-card.severity-danger {
+        border-right: 4px solid #ef4444;
+    }
+
+    .notif-card.severity-warning {
+        border-right: 4px solid #f59e0b;
+    }
+
+    .notif-card.severity-info {
+        border-right: 4px solid #0284c7;
+    }
+
+    .notif-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .notif-card-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .notif-severity-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.15rem;
+        flex-shrink: 0;
+    }
+
+    .severity-icon-danger {
+        background: #fee2e2;
+        border: 1.5px solid #fca5a5;
+    }
+
+    .severity-icon-warning {
+        background: #fef3c7;
+        border: 1.5px solid #fde047;
+    }
+
+    .severity-icon-info {
+        background: #e0f2fe;
+        border: 1.5px solid #bae6fd;
+    }
+
+    .notif-item-title {
+        font-size: 0.88rem;
+        font-weight: 800;
+        color: var(--text-main);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .new-dot-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ef4444;
+        display: inline-block;
+        animation: pulseBadge 1.5s infinite;
+    }
+
+    .notif-meta-pill {
+        display: inline-block;
+        font-size: 0.68rem;
+        font-weight: 800;
+        padding: 1px 6px;
+        border-radius: 8px;
+        margin-top: 3px;
+    }
+
+    .pill-danger {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fca5a5;
+    }
+
+    .pill-warning {
+        background: #fef3c7;
+        color: #854d0e;
+        border: 1px solid #fde047;
+    }
+
+    .pill-info {
+        background: #e0f2fe;
+        color: #0369a1;
+        border: 1px solid #bae6fd;
+    }
+
+    .notif-card-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .btn-play-tone {
+        background: #f8fafc;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 3px 6px;
+        font-size: 0.78rem;
+        cursor: pointer;
+        transition: all 0.12s ease;
+    }
+
+    .btn-play-tone:hover {
+        background: #e0f2fe;
+        border-color: #38bdf8;
+        transform: scale(1.1);
+    }
+
+    .btn-mark-read {
+        background: #f8fafc;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 3px 6px;
+        font-size: 0.78rem;
+        font-weight: bold;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.12s ease;
+    }
+
+    .btn-mark-read:hover {
+        background: #dcfce7;
+        color: #15803d;
+        border-color: #86efac;
+    }
+
+    /* Explanation Box (توضيح للإشعار) */
+    .notif-explanation-box {
+        background: #faf8f5;
+        border: 1px dashed var(--border-color);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 0.81rem;
+        color: var(--text-main);
+        line-height: 1.5;
+    }
+
+    .explanation-title {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.74rem;
+        font-weight: 800;
+        color: var(--accent-gold);
+        margin-bottom: 4px;
+    }
+
+    .explanation-content {
+        color: #334155;
+    }
+
+    /* Footer in Card */
+    .notif-card-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 2px;
+    }
+
+    .notif-time-ago {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+    }
+
+    .btn-navigate-target {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: #fbf7ee;
+        border: 1.2px solid var(--accent-gold);
+        color: var(--text-main);
+        border-radius: 10px;
+        padding: 4px 10px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .btn-navigate-target:hover {
+        background: var(--accent-gold);
+        color: #ffffff;
+        transform: translateX(-2px);
+    }
+
+    /* Empty state */
+    .notif-empty-state {
+        text-align: center;
+        padding: 34px 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .empty-icon-circle {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: #dcfce7;
+        color: #16a34a;
+        font-size: 1.5rem;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 4px;
+    }
+
+    .notif-empty-state h4 {
+        margin: 0;
+        font-size: 0.96rem;
+        color: var(--text-main);
+    }
+
+    .notif-empty-state p {
+        margin: 0;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        max-width: 320px;
+    }
+
+    /* Panel Footer */
+    .notif-panel-footer {
+        padding: 10px 16px;
+        background: #fdfaf4;
+        border-top: 1.5px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .btn-footer-refresh {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        background: #ffffff;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 4px 10px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: var(--text-main);
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .btn-footer-refresh:hover {
+        background: #f4ede1;
+        border-color: var(--accent-gold);
+    }
+</style>
+
+@code {
+    private bool _isOpen = false;
+    private string _activeTab = "all";
+    private bool _isMuted = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        NotificationService.OnChanged += HandleNotificationsChanged;
+        await NotificationService.RefreshNotificationsAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _isMuted = await JSRuntime.InvokeAsync<bool>("carAudio.isMuted");
+                StateHasChanged();
+            }
+            catch { }
+        }
+    }
+
+    public void Dispose()
+    {
+        NotificationService.OnChanged -= HandleNotificationsChanged;
+    }
+
+    private void HandleNotificationsChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleDropdown()
+    {
+        _isOpen = !_isOpen;
+        if (_isOpen)
+        {
+            // When opening, refresh notifications
+            _ = NotificationService.RefreshNotificationsAsync();
+        }
+    }
+
+    private void CloseDropdown()
+    {
+        _isOpen = false;
+    }
+
+    private async Task ToggleSoundMute()
+    {
+        try
+        {
+            _isMuted = await JSRuntime.InvokeAsync<bool>("carAudio.toggleMute");
+        }
+        catch { }
+    }
+
+    private async Task PlaySound(string soundType)
+    {
+        try
+        {
+            if (soundType == "engine_start")
+            {
+                await JSRuntime.InvokeVoidAsync("carAudio.playEngineStart");
+            }
+            else if (soundType == "engine_stop")
+            {
+                await JSRuntime.InvokeVoidAsync("carAudio.playEngineStop");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("carAudio.playNotification", soundType);
+            }
+        }
+        catch { }
+    }
+
+    private void MarkAllRead()
+    {
+        NotificationService.MarkAllAsRead();
+    }
+
+    private async Task RefreshData()
+    {
+        await NotificationService.RefreshNotificationsAsync();
+        await PlaySound("info");
+    }
+
+    private void HandleNotificationClick(SystemNotification item)
+    {
+        NotificationService.MarkAsRead(item.Id);
+        _isOpen = false;
+
+        if (!string.IsNullOrEmpty(item.TargetUrl))
+        {
+            Navigation.NavigateTo(item.TargetUrl);
+        }
+    }
+
+    private IEnumerable<SystemNotification> FilteredNotifications
+    {
+        get
+        {
+            var list = NotificationService.Notifications;
+            return _activeTab switch
+            {
+                "danger" => list.Where(n => n.Severity == NotificationSeverity.Danger),
+                "maintenance" => list.Where(n => n.Category == NotificationCategory.VehicleMaintenance 
+                                             || n.Category == NotificationCategory.VehicleLicense 
+                                             || n.Category == NotificationCategory.OilChange),
+                "contracts" => list.Where(n => n.Category == NotificationCategory.OverdueContract 
+                                            || n.Category == NotificationCategory.CustomerLicense),
+                _ => list
+            };
+        }
+    }
+
+    private int FilteredCount(string tab)
+    {
+        var list = NotificationService.Notifications;
+        return tab switch
+        {
+            "danger" => list.Count(n => n.Severity == NotificationSeverity.Danger),
+            "maintenance" => list.Count(n => n.Category == NotificationCategory.VehicleMaintenance 
+                                         || n.Category == NotificationCategory.VehicleLicense 
+                                         || n.Category == NotificationCategory.OilChange),
+            "contracts" => list.Count(n => n.Category == NotificationCategory.OverdueContract 
+                                        || n.Category == NotificationCategory.CustomerLicense),
+            _ => list.Count
+        };
+    }
+
+    private string GetCategoryIcon(NotificationCategory cat) => cat switch
+    {
+        NotificationCategory.OverdueContract => "🚨",
+        NotificationCategory.VehicleMaintenance => "⛔",
+        NotificationCategory.VehicleLicense => "⚠️",
+        NotificationCategory.OilChange => "🔧",
+        NotificationCategory.TrafficViolation => "💸",
+        NotificationCategory.CustomerLicense => "🪪",
+        _ => "🔔"
+    };
+
+    private string FormatTimeAgo(DateTime dt)
+    {
+        var span = DateTime.Now - dt;
+        if (span.TotalMinutes < 60) return $"منذ {(int)Math.Max(1, span.TotalMinutes)} دقيقة";
+        if (span.TotalHours < 24) return $"منذ {(int)span.TotalHours} ساعة";
+        if (span.TotalDays < 30) return $"منذ {(int)span.TotalDays} يوم";
+        return dt.ToString("yyyy/MM/dd");
+    }
+}

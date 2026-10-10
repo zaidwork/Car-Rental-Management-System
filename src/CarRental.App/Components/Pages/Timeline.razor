@@ -1,0 +1,20 @@
+@page "/timeline"
+@using CarRental.App.Components.Shared
+
+<PageTitle>مخطط الحجوزات والتعاقدات (Timeline) | TAJ SYSTEM</PageTitle>
+
+<div class="timeline-page-container">
+    <BookingTimelineWidget />
+</div>
+
+<style>
+    .timeline-page-container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        padding-bottom: 30px;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+</style>

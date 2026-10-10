@@ -1,0 +1,56 @@
+# ==============================================================================
+# Comprehensive .gitignore for Car Rental Management System
+# ==============================================================================
+
+# Database files & backups (Do not commit live or local databases)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+Backups/
+AutoBackups/
+
+# Environment, secrets & cloud configs
+*.env
+*.env.*
+!.env.example
+supabase_cloud_config.json
+
+# Build outputs, published packages & binaries
+bin/
+obj/
+dist/
+publish/
+installer_output/
+*.dll
+*.pdb
+*.exe
+
+# Logs
+*.log
+Logs/
+
+# Web App dependencies and artifacts
+node_modules/
+dist-ssr/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Visual Studio & IDE cache
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# OS generated files
+.DS_Store
+Thumbs.db

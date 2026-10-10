@@ -1,0 +1,270 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Interfaces
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+
+@if (Contract != null)
+{
+<div class="modal-overlay">
+    <div class="modal-card" style="max-width: 780px;">
+        <div class="modal-header">
+            <div class="modal-title">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-blue)" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"></path>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                </svg>
+                <span>كشف فحص وتسليم المركبة والأضرار والملحقات</span>
+            </div>
+            <button class="btn-close-modal" @onclick="OnClose">×</button>
+        </div>
+
+        <div class="modal-body">
+            <!-- Summary Info -->
+            <div style="background: #fdfaf4; border: 1.5px solid var(--border-color); border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
+                <div>العقد: <strong style="color: var(--primary-blue);">@Contract.ContractNumber</strong></div>
+                <div>المركبة: <strong>@Contract.Vehicle?.Brand @Contract.Vehicle?.Model (لوحة: @Contract.Vehicle?.PlateNumber)</strong></div>
+                <div>المستأجر: <strong>@Contract.Customer?.FullName</strong></div>
+            </div>
+
+            <!-- Type Selector -->
+            <div style="display: flex; gap: 12px; margin-top: 6px;">
+                <label style="display: flex; align-items: center; gap: 6px; font-weight: bold; cursor: pointer;">
+                    <input type="radio" name="inspType" checked="@(_type == InspectionType.HandoverOut)" @onchange="() => _type = InspectionType.HandoverOut" />
+                    <span>تسليم المركبة للعميل (عند خروجها)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; font-weight: bold; cursor: pointer;">
+                    <input type="radio" name="inspType" checked="@(_type == InspectionType.ReturnIn)" @onchange="() => _type = InspectionType.ReturnIn" />
+                    <span>استلام المركبة من العميل (عند إرجاعها)</span>
+                </label>
+            </div>
+
+            <!-- Accessories Checklist Grid -->
+            <div style="background: #ffffff; border: 1.5px solid var(--border-color); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                <span style="font-weight: 800; color: var(--text-main); font-size: 0.95rem; border-bottom: 1.5px solid var(--border-subtle); padding-bottom: 6px;">
+                    1. قائمة ملحقات وسلامة المركبة:
+                </span>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; font-size: 0.88rem; font-weight: 600;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" @bind="_hasSpareTire" />
+                        <span>🛞 إطار احتياطي (سبير)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" @bind="_hasJackAndTools" />
+                        <span>🔧 رافعة عجل ومفتاح (عدة)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" @bind="_hasFireExtinguisher" />
+                        <span>🧯 طفاية حريق سارية</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" @bind="_hasFirstAidKit" />
+                        <span>🩹 حقيبة إسعاف أولي ومثلث</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" @bind="_isCleanInterior" />
+                        <span>✨ نظافة الفرش والصالون</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" @bind="_isCleanExterior" />
+                        <span>🚗 نظافة الهيكل الخارجي</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Vehicle Exterior Diagram / Checklist -->
+            <div style="background: #ffffff; border: 1.5px solid var(--border-color); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid var(--border-subtle); padding-bottom: 8px;">
+                    <span style="font-weight: 800; color: var(--text-main); font-size: 0.95rem;">
+                        2. كشف الخدوش والضربات على مخطط الهيكل التفاعلي:
+                    </span>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        @if (_type == InspectionType.ReturnIn && _newDamagesOnReturnCount > 0)
+                        {
+                            <span style="background: #fee2e2; color: #dc2626; border: 1.5px solid #ef4444; padding: 3px 10px; border-radius: 6px; font-weight: 800; font-size: 0.8rem; animation: pulseSubtle 1.5s infinite;">
+                                ⚠️ رصد @_newDamagesOnReturnCount ضرر جديد لم يكن موجوداً عند التسليم!
+                            </span>
+                        }
+                        <button type="button" class="filter-pill" style="padding: 2px 10px; font-size: 0.76rem;" @onclick="() => _showBodyPartsGrid = !_showBodyPartsGrid">
+                            @(_showBodyPartsGrid ? "إخفاء قائمة الأجزاء" : "عرض قائمة أجزاء الهيكل")
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Interactive Condition Diagram -->
+                <VehicleConditionDiagram Marks="@_marks" 
+                                        MarksChanged="OnMarksChanged"
+                                        CurrentStaffUsername="@CurrentStaff"
+                                        InspectionPhase="@(_type == InspectionType.ReturnIn ? "ReturnIn" : "HandoverOut")"
+                                        ContractId="@Contract.Id"
+                                        ContractNumber="@Contract.ContractNumber"
+                                        IsComparisonMode="@(_type == InspectionType.ReturnIn)"
+                                        OnDamagesUpdated="StateHasChanged" />
+
+                @if (_showBodyPartsGrid)
+                {
+                    <!-- Body Parts Toggle Grid (Quick selection) -->
+                    <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; margin-top: 4px;">
+                        <span style="font-size: 0.82rem; font-weight: bold; color: var(--text-muted); display: block; margin-bottom: 8px;">
+                            أو حدد الأجزاء المتضررة من القائمة السريعة:
+                        </span>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 0.82rem;">
+                            @foreach (var part in _bodyParts)
+                            {
+                                <div style="border: 1px solid @(_selectedParts.Contains(part) ? "#ef4444" : "#cbd5e1"); background: @(_selectedParts.Contains(part) ? "#fee2e2" : "#ffffff"); padding: 6px 8px; border-radius: 6px; cursor: pointer; text-align: center; font-weight: bold; transition: all 0.2s;"
+                                     @onclick="() => TogglePart(part)">
+                                    <span>@(_selectedParts.Contains(part) ? "⚠️ " : "✓ ") @part</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="form-group" style="margin-top: 4px;">
+                    <label class="form-label" style="font-size: 0.84rem; font-weight: 700;">تفاصيل وملاحظات إضافية عن كشف الفحص:</label>
+                    <textarea class="form-control" rows="2" placeholder="اكتب أي ملاحظة عن حالة الزجاج، الإطارات، أو تفاصيل الأضرار المرصودة..." @bind="_damageNotes"></textarea>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_statusMessage))
+            {
+                <div style="background: #d1fae5; color: #065f46; border: 1.5px solid #10b981; padding: 10px; border-radius: 8px; font-weight: bold;">
+                    ✓ @_statusMessage
+                </div>
+            }
+        </div>
+
+        <div class="modal-footer">
+            <button class="filter-pill" @onclick="OnClose">إغلاق</button>
+            <button class="btn-primary-action" @onclick="SaveInspection" disabled="@_isSubmitting">
+                <span>@(_isSubmitting ? "جاري الحفظ..." : "حفظ وتوثيق كشف الفحص")</span>
+            </button>
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    [Parameter] public Contract? Contract { get; set; }
+    [Parameter] public InspectionType InitialType { get; set; } = InspectionType.HandoverOut;
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private InspectionType _type = InspectionType.HandoverOut;
+    private bool _hasSpareTire = true;
+    private bool _hasJackAndTools = true;
+    private bool _hasFireExtinguisher = true;
+    private bool _hasFirstAidKit = true;
+    private bool _isCleanInterior = true;
+    private bool _isCleanExterior = true;
+    private string? _damageNotes;
+    private bool _isSubmitting = false;
+    private string? _statusMessage;
+    private bool _showBodyPartsGrid = false;
+
+    private List<VehicleDamageMark> _marks = new();
+
+    private int _newDamagesOnReturnCount => _marks.Count(m => m.InspectionPhase == "ReturnIn" && !m.IsRepaired);
+
+    private string CurrentStaff => !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username)
+        ? AuthState.CurrentUser.Username
+        : AuthState.CurrentUser.FullName;
+
+    private readonly List<string> _bodyParts = new()
+    {
+        "المصد الأمامي", "الشبك والكبوت", "الرفرف الأمامي يمين", "الرفرف الأمامي يسار",
+        "الباب الأمامي يمين", "الباب الخلفي يمين", "الباب الأمامي يسار", "الباب الخلفي يسار",
+        "السقف", "الزجاج الأمامي", "الزجاج الخلفي", "المصد الخلفي والشنطة"
+    };
+
+    private readonly HashSet<string> _selectedParts = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _type = InitialType;
+
+        if (Contract?.Vehicle != null)
+        {
+            _marks = Contract.Vehicle.GetDamageMarks();
+        }
+
+        // If ReturnIn, let's load HandoverOut inspection to pre-fill baseline
+        if (Contract != null && _type == InspectionType.ReturnIn)
+        {
+            try
+            {
+                var inspections = await RentalService.GetVehicleInspectionsAsync(Contract.Id);
+                var handover = inspections.FirstOrDefault(i => i.Type == InspectionType.HandoverOut);
+                if (handover != null && !string.IsNullOrWhiteSpace(handover.DamageMarksJson))
+                {
+                    var baselineMarks = handover.GetDamageMarks();
+                    // Merge if marks is empty
+                    if (!_marks.Any())
+                    {
+                        _marks = baselineMarks;
+                    }
+                }
+            }
+            catch { }
+        }
+    }
+
+    private void TogglePart(string part)
+    {
+        if (_selectedParts.Contains(part)) _selectedParts.Remove(part);
+        else _selectedParts.Add(part);
+    }
+
+    private void OnMarksChanged(List<VehicleDamageMark> updatedMarks)
+    {
+        _marks = updatedMarks;
+    }
+
+    private async Task SaveInspection()
+    {
+        if (Contract == null) return;
+        try
+        {
+            _isSubmitting = true;
+            var staff = CurrentStaff;
+
+            // Generate description from marks and selected body parts
+            var marksSummary = _marks.Where(m => !m.IsRepaired).Select(m => $"{m.DamageType} ({m.Description})").ToList();
+            var combinedParts = _selectedParts.Concat(marksSummary).Distinct().ToList();
+
+            var inspection = new VehicleInspection
+            {
+                ContractId = Contract.Id,
+                VehicleId = Contract.VehicleId,
+                Type = _type,
+                InspectionDateTime = DateTime.Now,
+                StaffUsername = staff,
+                HasSpareTire = _hasSpareTire,
+                HasJackAndTools = _hasJackAndTools,
+                HasFireExtinguisher = _hasFireExtinguisher,
+                HasFirstAidKit = _hasFirstAidKit,
+                IsCleanInterior = _isCleanInterior,
+                IsCleanExterior = _isCleanExterior,
+                Odometer = Contract.Vehicle?.CurrentOdometer ?? Contract.StartOdometer,
+                FuelLevel = Contract.FuelLevelStart,
+                ScratchesDescription = combinedParts.Any() ? string.Join("، ", combinedParts) : "لا توجد خدوش ملحوظة",
+                DamageNotes = _damageNotes,
+                DamageMarksJson = System.Text.Json.JsonSerializer.Serialize(_marks)
+            };
+
+            await RentalService.SaveVehicleInspectionAsync(inspection, staff);
+            _statusMessage = "تم حفظ كشف الفحص وتوثيق حالة الهيكل بنجاح!";
+            await Task.Delay(800);
+            await OnSaved.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _statusMessage = "حدث خطأ أثناء الحفظ: " + ex.Message;
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+}
+

@@ -1,0 +1,923 @@
+/* ==========================================================================
+   نظام إدارة وتأجير السيارات - Mobile Web Design System
+   Identical to Desktop System: Warm Beige + Royal Wood + Gold + Sky Blue
+   Strict RTL Direction & Executive Luxury Styling
+   ========================================================================== */
+
+:root {
+  /* Theme Colors: Warm Beige & Cream Base (مطابق للسيستم المكتبي تماماً) */
+  --bg-main: #f6f3eb;
+  --bg-header: linear-gradient(180deg, #f7f2e8 0%, #eee5d5 100%);
+  --bg-sidebar: #ede7da;
+  --bg-card: #ffffff;
+  --bg-card-hover: #fcfaf6;
+  --bg-card-alt: #f9f6f0;
+  
+  /* Borders & Dividers */
+  --border-color: #ded4bf;
+  --border-subtle: #e8e1cf;
+  --border-highlight: #c59b27;
+  
+  /* Light Sky Blue Accents & Primary Brand */
+  --primary-blue: #0284c7;
+  --primary-light: #0ea5e9;
+  --primary-sky: #38bdf8;
+  --primary-bg: #e0f2fe;
+  --primary-hover: #0369a1;
+  
+  /* Royal Gold / Champagne Accents */
+  --accent-gold: #c59b27;
+  --accent-gold-hover: #b38728;
+  --accent-gold-light: #d4a340;
+  --accent-gold-bg: rgba(197, 155, 39, 0.12);
+  --accent-gold-border: #d4af37;
+
+  /* Semantic Status Accents */
+  --accent-red: #dc2626;
+  --accent-red-bg: #fee2e2;
+  --accent-red-border: #fca5a5;
+  --accent-orange: #d97706;
+  --accent-orange-bg: #fef3c7;
+  --accent-orange-border: #fcd34d;
+  --accent-green: #059669;
+  --accent-green-bg: #d1fae5;
+  --accent-green-border: #6ee7b7;
+
+  /* Typography: Deep, Crisp, High-Contrast */
+  --text-main: #1e293b;
+  --text-muted: #526077;
+  --text-dark: #334155;
+  --text-light-blue: #0284c7;
+  --text-gold: #996515;
+
+  /* Royal Wood & Executive Luxury Palette (اللمسة الخشبية الملكية الفاخرة) */
+  --wood-dark: #1e110a;
+  --wood-walnut: #2d180c;
+  --wood-mahogany: #442211;
+  --wood-warm: #5c3016;
+  --wood-amber: #7e431e;
+  --wood-cognac: #9a5426;
+  --wood-caramel: #b86e36;
+  --wood-gold-inlay: #d4af37;
+  --wood-gold-light: #f5e4b7;
+  
+  /* Luxury Wood Veneer Gradients */
+  --wood-trim-gradient: linear-gradient(90deg, #1e110a 0%, #442211 20%, #7e431e 42%, #d4af37 50%, #7e431e 58%, #442211 80%, #1e110a 100%);
+  --wood-burl-gradient: linear-gradient(135deg, #24130a 0%, #3e1f0e 40%, #5c3016 70%, #7e431e 100%);
+  --wood-btn-gradient: linear-gradient(135deg, #2a150a 0%, #462412 50%, #633317 100%);
+  --wood-btn-hover: linear-gradient(135deg, #381c0d 0%, #5a2e17 50%, #7d401e 100%);
+  --wood-panel-gradient: linear-gradient(180deg, #ede5d5 0%, #e6dccd 50%, #ddd0be 100%);
+  --wood-glow: 0 4px 18px rgba(45, 24, 12, 0.22);
+
+  --font-family: 'Cairo', 'Tajawal', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --shadow-card: 0 4px 16px rgba(60, 35, 18, 0.08);
+  --shadow-elevated: 0 8px 24px rgba(60, 35, 18, 0.12);
+}
+
+/* Reset & Global */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  direction: rtl;
+  text-align: right;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Container for Mobile Web */
+.mobile-container {
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background-color: var(--bg-main);
+  position: relative;
+  box-shadow: 0 0 35px rgba(45, 24, 12, 0.12);
+}
+
+/* 1. Top Luxury Header (مطابق للسيستم) */
+.mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg-header);
+  border-bottom: 2px solid var(--wood-warm);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 14px rgba(45, 24, 12, 0.08);
+}
+
+.mobile-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  background: var(--wood-trim-gradient);
+}
+
+.brand-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #ffffff;
+  padding: 2px;
+  border: 1.5px solid var(--wood-gold-inlay);
+  box-shadow: 0 2px 8px rgba(45, 24, 12, 0.15);
+}
+
+.header-title-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.header-title {
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: var(--wood-walnut);
+  line-height: 1.2;
+}
+
+.header-sub {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge-live-pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  animation: pulseDot 1.8s infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+}
+
+/* 2. Executive KPI Summary Cards */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 14px 16px 6px 16px;
+}
+
+.kpi-card {
+  background: #ffffff;
+  border: 1.5px solid var(--border-color);
+  border-radius: 12px;
+  padding: 8px 6px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(45, 24, 12, 0.04);
+}
+
+.kpi-card.kpi-available {
+  border-color: #86efac;
+  background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+}
+
+.kpi-card.kpi-rented {
+  border-color: #fca5a5;
+  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
+}
+
+.kpi-card.kpi-maint {
+  border-color: #fcd34d;
+  background: linear-gradient(180deg, #ffffff 0%, #fffbeb 100%);
+}
+
+.kpi-val {
+  font-size: 1.35rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.kpi-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* 3. Action Filter Pills (مطابق لسيستم المكتب) */
+.action-filter-strip {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(180deg, #ede4d3 0%, #e3d8c4 100%);
+  border: 1.5px solid #c8b9a1;
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+  margin: 10px 16px;
+  box-shadow: inset 0 1px 3px rgba(45, 24, 12, 0.08);
+}
+
+.filter-pill {
+  flex: 1;
+  padding: 8px 4px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #634d3f;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+  background: transparent;
+  font-family: inherit;
+  text-align: center;
+}
+
+.filter-pill.active {
+  background: #ffffff;
+  color: var(--wood-walnut);
+  border: 1.5px solid var(--wood-amber);
+  box-shadow: 0 2px 8px rgba(45, 24, 12, 0.12);
+}
+
+/* 4. Luxury Vehicle Cards */
+.vehicle-card-luxury {
+  background: #ffffff;
+  border: 1.8px solid var(--border-color);
+  border-radius: 18px;
+  padding: 16px;
+  margin: 0 16px 14px 16px;
+  box-shadow: 0 6px 20px rgba(45, 24, 12, 0.07);
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.vehicle-card-luxury::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: #ede6d8;
+}
+
+.vehicle-card-luxury.card-rented::before {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+.vehicle-card-luxury.card-available::before {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.car-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.car-title-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.car-brand-model {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: var(--wood-walnut);
+  letter-spacing: -0.2px;
+}
+
+.car-specs-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plate-badge-system {
+  font-family: monospace;
+  font-weight: 900;
+  font-size: 0.88rem;
+  background: #ede6d8;
+  color: var(--primary-blue);
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-color);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* Image & Main specs row */
+.car-body-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.car-img-frame {
+  width: 120px;
+  height: 82px;
+  background: #fdfaf4;
+  border: 1.5px solid var(--border-color);
+  border-radius: 12px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 3px rgba(45, 24, 12, 0.05);
+}
+
+.car-img-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.car-quick-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.stat-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fbf9f4;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.stat-pill .lbl {
+  color: var(--text-muted);
+}
+
+.stat-pill .val {
+  color: var(--wood-walnut);
+  font-weight: 800;
+}
+
+.rate-highlight {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: var(--wood-amber);
+}
+
+/* 5. Status Badges */
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.badge-status-available {
+  background: var(--accent-green-bg);
+  color: var(--accent-green);
+  border: 1.5px solid var(--accent-green-border);
+}
+
+.badge-status-rented {
+  background: var(--accent-red-bg);
+  color: var(--accent-red);
+  border: 1.5px solid var(--accent-red-border);
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.15);
+}
+
+.badge-status-maint {
+  background: var(--accent-orange-bg);
+  color: var(--accent-orange);
+  border: 1.5px solid var(--accent-orange-border);
+}
+
+/* 6. Rented Tenant Box (معلومات المستأجر الفاخرة) */
+.tenant-executive-box {
+  background: linear-gradient(180deg, #fffdfa 0%, #fbf7ee 100%);
+  border: 1.5px solid #ded3be;
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-top: 12px;
+  box-shadow: inset 0 1px 0 #ffffff;
+}
+
+.tenant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tenant-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.94rem;
+  font-weight: 900;
+  color: var(--wood-walnut);
+}
+
+.tenant-national-id {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.tenant-times-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 0.76rem;
+}
+
+.time-item {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.time-item .t-lbl {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.time-item .t-val {
+  color: var(--wood-walnut);
+  font-weight: 800;
+}
+
+.remaining-alert-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.remaining-normal {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.remaining-late {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1.5px solid #ef4444;
+  animation: latePulse 1.5s infinite;
+}
+
+@keyframes latePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
+/* 7. Action Buttons (مطابقة لأزرار السيستم المكتبي تماماً) */
+.btn-primary-action, .btn-rent-wood {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--wood-btn-gradient);
+  color: #ffffff !important;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  font-weight: 800;
+  font-size: 0.95rem;
+  border: 1.8px solid var(--wood-gold-inlay);
+  box-shadow: 0 4px 14px rgba(45, 24, 12, 0.28), inset 0 1px 1px rgba(245, 228, 183, 0.35);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  width: 100%;
+  margin-top: 10px;
+  font-family: inherit;
+}
+
+.btn-primary-action:hover, .btn-rent-wood:hover {
+  background: var(--wood-btn-hover);
+  border-color: #f5e4b7;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(45, 24, 12, 0.38);
+}
+
+.btn-primary-action:active, .btn-rent-wood:active {
+  transform: translateY(0);
+}
+
+/* Tenant Quick Contact Buttons */
+.tenant-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.btn-whatsapp-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  border: 1.5px solid #059669;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25);
+  transition: transform 0.15s;
+}
+
+.btn-whatsapp-action:hover {
+  transform: translateY(-1px);
+}
+
+.btn-call-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  border: 1.5px solid #0369a1;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(2, 132, 199, 0.25);
+  transition: transform 0.15s;
+}
+
+.btn-call-action:hover {
+  transform: translateY(-1px);
+}
+
+/* 8. Bottom Navigation (Executive Wood Bezel) */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 500px;
+  height: 65px;
+  background: linear-gradient(180deg, #f7f2e8 0%, #ede5d5 100%);
+  border-top: 2px solid var(--wood-warm);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 10px;
+  z-index: 100;
+  box-shadow: 0 -4px 20px rgba(45, 24, 12, 0.08);
+}
+
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: transparent;
+  border: none;
+  color: #6d5849;
+  font-size: 0.74rem;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 6px 14px;
+  border-radius: 12px;
+  transition: all 0.18s ease;
+  font-family: inherit;
+}
+
+.bottom-nav-item.active {
+  color: var(--wood-walnut);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--wood-amber);
+  box-shadow: 0 2px 8px rgba(45, 24, 12, 0.1);
+}
+
+.bottom-nav-item svg {
+  color: currentColor;
+}
+
+.bottom-nav-item.active svg {
+  color: var(--wood-amber);
+}
+
+/* 9. Forms & Inputs (Warm Executive Style) */
+.form-input, .form-select {
+  width: 100%;
+  background: #ffffff;
+  border: 1.8px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-input:focus, .form-select:focus {
+  border-color: var(--wood-amber);
+  box-shadow: 0 0 0 3px rgba(126, 67, 30, 0.15);
+}
+
+.form-label {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: var(--wood-walnut);
+  margin-bottom: 4px;
+  display: block;
+}
+
+/* 10. Keypad in LoginScreen (مطابق للسيستم تماماً) */
+.login-executive-card {
+  position: relative;
+  background: #ffffff;
+  border: 2px solid var(--border-color);
+  border-radius: 26px;
+  box-shadow: 0 20px 50px rgba(60, 35, 18, 0.12), inset 0 1px 0 #ffffff;
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.login-wood-inlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: var(--wood-trim-gradient);
+}
+
+.keypad-grid-system {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+  max-width: 310px;
+  margin: 0 auto;
+  direction: rtl;
+}
+
+.keypad-btn-system {
+  background: #faf8f5;
+  border: 1.8px solid var(--border-color);
+  border-radius: 16px;
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 3px 8px rgba(60, 35, 18, 0.05), inset 0 1px 0 #ffffff;
+  transition: all 0.12s ease;
+  font-family: inherit;
+}
+
+.keypad-btn-system:hover {
+  background: #ffffff;
+  border-color: var(--wood-amber);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 12px rgba(60, 35, 18, 0.1);
+}
+
+.keypad-btn-system:active {
+  transform: scale(0.96);
+  background: #f1ebd9;
+}
+
+.main-digit-txt {
+  font-size: 1.45rem;
+  font-weight: 900;
+  color: var(--wood-walnut);
+  line-height: 1;
+}
+
+.sub-digit-txt {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #8c7362;
+  margin-top: 1px;
+}
+
+.keypad-clear-btn {
+  color: #dc2626;
+  border-color: #fca5a5;
+  background: #fff5f5;
+}
+
+.keypad-backspace-btn {
+  color: var(--text-muted);
+}
+
+/* Animations */
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   11. Executive Modal Dialog (Bottom-Sheet on Mobile, Floating on Tablet)
+   ========================================================================== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(30, 17, 10, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  animation: fadeIn 0.25s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-content {
+  background: #ffffff;
+  width: 100%;
+  max-width: 500px;
+  max-height: 92vh;
+  border-radius: 24px 24px 0 0;
+  overflow-y: auto;
+  box-shadow: 0 -12px 40px rgba(45, 24, 12, 0.28);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  direction: rtl;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: linear-gradient(180deg, #f7f2e8 0%, #eee5d5 100%);
+  border-bottom: 1.5px solid var(--border-color);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--wood-trim-gradient);
+}
+
+.modal-title {
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: var(--wood-walnut);
+}
+
+.modal-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid var(--border-color);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.modal-close-btn:hover {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #dc2626;
+}
+
+.modal-body {
+  padding: 18px 20px 30px 20px;
+  flex: 1;
+}
+
+/* Alert Banners */
+.alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.alert-danger {
+  background: #fef2f2;
+  border: 1.5px solid #f87171;
+  color: #991b1b;
+}
+
+.alert-warning {
+  background: #fffbeb;
+  border: 1.5px solid #fcd34d;
+  color: #b45309;
+}
+
+.alert-success {
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  color: #166534;
+}
+

@@ -1,0 +1,1980 @@
+@page "/accounting"
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Interfaces
+@using CarRental.App.Helpers
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<style>
+    /* ==========================================================================
+       Accounting & Live Treasury Luxury Theme Styles
+       ========================================================================== */
+    .acc-header-box {
+        background: #ffffff;
+        border: 1.5px solid var(--border-color);
+        border-radius: 16px;
+        padding: 20px 24px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .acc-title-group {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .acc-title-icon {
+        background: linear-gradient(135deg, rgba(2, 132, 199, 0.12) 0%, rgba(2, 132, 199, 0.22) 100%);
+        border: 1.5px solid #38bdf8;
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+
+    .acc-tabs-bar {
+        display: flex;
+        gap: 6px;
+        background: #f1f5f9;
+        padding: 4px;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .acc-tab-btn {
+        padding: 8px 16px;
+        border-radius: 8px;
+        border: none;
+        background: transparent;
+        font-weight: 700;
+        font-size: 0.88rem;
+        color: #475569;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .acc-tab-btn:hover {
+        color: #0f172a;
+        background: rgba(255, 255, 255, 0.6);
+    }
+
+    .acc-tab-btn.active {
+        background: #ffffff;
+        color: #0284c7;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        font-weight: 800;
+    }
+
+    /* Executive Balance Cards ("شو إلي وشو عليّ") */
+    .acc-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 14px;
+    }
+
+    .acc-kpi-card {
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 18px 20px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+        position: relative;
+        overflow: hidden;
+        border: 1.5px solid #e2e8f0;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    .acc-kpi-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.07);
+    }
+
+    .acc-kpi-card.cash-drawer {
+        border-color: #38bdf8;
+        background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%);
+    }
+
+    .acc-kpi-card.receivables {
+        border-color: #86efac;
+        background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+    }
+
+    .acc-kpi-card.payables {
+        border-color: #fca5a5;
+        background: linear-gradient(180deg, #fff1f2 0%, #ffffff 100%);
+    }
+
+    .acc-kpi-card.net-profit {
+        border-color: #c084fc;
+        background: linear-gradient(180deg, #faf5ff 0%, #ffffff 100%);
+    }
+
+    .acc-kpi-card.debts {
+        border-color: #fdba74;
+        background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+    }
+
+    .acc-kpi-label {
+        font-size: 0.84rem;
+        font-weight: 800;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .acc-kpi-value {
+        font-size: 1.7rem;
+        font-weight: 900;
+        margin: 10px 0 4px 0;
+        line-height: 1.1;
+        letter-spacing: -0.5px;
+    }
+
+    .acc-kpi-sub {
+        font-size: 0.76rem;
+        color: #64748b;
+        line-height: 1.4;
+    }
+
+    /* Summary Bar for Business Owner Clarity */
+    .acc-executive-banner {
+        background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
+        color: #ffffff;
+        border-radius: 12px;
+        padding: 12px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        box-shadow: 0 4px 15px rgba(15, 23, 42, 0.15);
+    }
+
+    /* Shift Hero Master Card */
+    .acc-shift-hero {
+        background: #ffffff;
+        border: 2px solid #38bdf8;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 6px 20px rgba(56, 189, 248, 0.08);
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .acc-shift-metrics-grid {
+        display: grid;
+        grid-template-columns: 1fr 1.3fr 1.6fr;
+        gap: 14px;
+    }
+
+    .acc-shift-box {
+        background: #f8fafc;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 16px 18px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .acc-shift-box.highlight {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+        border-color: #0284c7;
+        color: #ffffff;
+    }
+
+    /* High Contrast Modern Table */
+    .acc-modern-table-container {
+        background: #ffffff;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.03);
+    }
+
+    .acc-modern-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: right;
+        font-size: 0.88rem;
+    }
+
+    .acc-modern-table thead tr {
+        background: #1e293b !important;
+        color: #ffffff !important;
+        border-bottom: 2px solid #0f172a;
+    }
+
+    .acc-modern-table th {
+        background: #1e293b !important;
+        color: #f8fafc !important;
+        padding: 13px 14px !important;
+        font-weight: 800 !important;
+        font-size: 0.85rem !important;
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+        text-align: center;
+        border: none !important;
+    }
+
+    .acc-modern-table th.text-start {
+        text-align: right;
+    }
+
+    .acc-modern-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: middle;
+        text-align: center;
+        color: #1e293b;
+    }
+
+    .acc-modern-table td.text-start {
+        text-align: right;
+    }
+
+    .acc-modern-table tr:hover td {
+        background: #f8fafc;
+    }
+
+    /* Subtotals Live Ribbon */
+    .acc-subtotals-ribbon {
+        background: #f8fafc;
+        border-bottom: 1.5px solid #e2e8f0;
+        padding: 12px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 14px;
+    }
+
+    .bidi-text {
+        unicode-bidi: isolate;
+        direction: rtl;
+        text-align: right;
+        line-height: 1.45;
+        word-break: break-word;
+    }
+
+    .nowrap-num {
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .acc-voucher-badge {
+        font-family: monospace;
+        font-weight: 800;
+        font-size: 0.82rem;
+        background: #e0f2fe;
+        color: #0369a1;
+        padding: 3px 8px;
+        border-radius: 6px;
+        border: 1px solid #bae6fd;
+        display: inline-block;
+        white-space: nowrap;
+    }
+</style>
+
+<div style="display: flex; flex-direction: column; gap: 20px;">
+    
+    <!-- Top Action & Navigation Bar -->
+    <div class="acc-header-box">
+        <div class="acc-title-group">
+            <div class="acc-title-icon">⚖️</div>
+            <div>
+                <h2 style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 10px;">
+                    <span>نظام الحسابات والمالية الشامل (Accounting & Live Treasury)</span>
+                    @if (_currentShift != null && !_currentShift.IsClosed)
+                    {
+                        <span style="font-size: 0.75rem; background: #dcfce7; color: #15803d; border: 1.5px solid #86efac; padding: 2px 10px; border-radius: 20px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px;">
+                            <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #16a34a;"></span>
+                            الدرج مفتوح
+                        </span>
+                    }
+                </h2>
+                <span style="font-size: 0.84rem; color: #64748b; font-weight: 500;">
+                    متابعة نقد الصندوق اللحظي، كشف شو إلك وشو عليك، تسجيل كل شيكل مصروف وإيراد، وضبط أرباح الأسطول
+                </span>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <!-- Main Tabs -->
+            <div class="acc-tabs-bar">
+                <button class="acc-tab-btn @(_currentTab == "shift" ? "active" : "")" @onclick='() => _currentTab = "shift"'>
+                    <span>💵 الصندوق والورديات</span>
+                </button>
+                <button class="acc-tab-btn @(_currentTab == "transactions" ? "active" : "")" @onclick='() => _currentTab = "transactions"'>
+                    <span>📋 سجل المقبوضات والمصروفات (@(_transactions?.Count ?? 0))</span>
+                </button>
+                <button class="acc-tab-btn @(_currentTab == "debts" ? "active" : "")" @onclick='() => _currentTab = "debts"'>
+                    <span>💳 كشف ديون العملاء (@(CustomersWithDebts.Count))</span>
+                </button>
+                <button class="acc-tab-btn @(_currentTab == "profitability" ? "active" : "")" @onclick='() => _currentTab = "profitability"'>
+                    <span>🚗 ربحية الأسطول (@(_profitability?.Count ?? 0))</span>
+                </button>
+            </div>
+
+            <!-- Action Buttons -->
+            <button class="btn-primary-action" style="background: #15803d; border-color: #166534; gap: 6px; padding: 9px 18px; font-weight: 800; box-shadow: 0 4px 12px rgba(22, 101, 52, 0.2);" @onclick="OpenAddReceiptModal">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>تسجيل سند قبض مالي 📥</span>
+            </button>
+
+            <button class="btn-primary-action" style="background: #dc2626; border-color: #b91c1c; gap: 6px; padding: 9px 18px; font-weight: 800; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);" @onclick="OpenAddExpenseModal">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>تسجيل سند صرف / مصروف 💸</span>
+            </button>
+
+            <button class="btn-primary-action" style="background: #0284c7; border-color: #0369a1; gap: 6px; padding: 9px 15px; font-weight: 800;" @onclick="ExportAccountingToExcel" title="تصدير كشف الحركات المالية إلى Excel">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span>تصدير Excel 📊</span>
+            </button>
+
+            <button class="btn-primary-action" style="background: #1e293b; border-color: #0f172a; gap: 6px; padding: 9px 15px;" @onclick="PrintReport">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                <span>طباعة (PDF)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Executive Financial Balance Hub ("شو إلي وشو عليّ") -->
+    <div class="acc-kpi-grid">
+        <!-- 1. Live Cash Drawer -->
+        <div class="acc-kpi-card cash-drawer">
+            <div class="acc-kpi-label" style="color: #0369a1;">
+                <span>💵 نقد الصندوق الحالي (كاش)</span>
+                <span style="font-size: 0.72rem; background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 12px; font-weight: 800;">حي مباشر</span>
+            </div>
+            <div class="acc-kpi-value" style="color: #0284c7;">
+                @LiveCashInDrawer.ToString("N0") ₪
+            </div>
+            <div class="acc-kpi-sub">
+                النقد الفعلي الحاضر بالدرج الآن (جاهز للاستلام أو الصرف)
+            </div>
+        </div>
+
+        <!-- 2. What is Owed to Me ("شو إلي") -->
+        <div class="acc-kpi-card receivables">
+            <div class="acc-kpi-label" style="color: #166534;">
+                <span>🟢 شو إلي (إجمالي حقوقك)</span>
+                <span style="font-size: 0.72rem; background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 12px; font-weight: 800;">كاش + ديون</span>
+            </div>
+            <div class="acc-kpi-value" style="color: #15803d;">
+                @((LiveCashInDrawer + TotalCustomerDebts).ToString("N0")) ₪
+            </div>
+            <div class="acc-kpi-sub">
+                الكاش بالدرج (@LiveCashInDrawer.ToString("N0") ₪) + ديون عند الزبائن (@TotalCustomerDebts.ToString("N0") ₪)
+            </div>
+        </div>
+
+        <!-- 3. What I Owe / Paid Out ("شو عليّ") -->
+        <div class="acc-kpi-card payables">
+            <div class="acc-kpi-label" style="color: #991b1b;">
+                <span>🔴 شو عليّ (المصاريف والنفقات)</span>
+                <span style="font-size: 0.72rem; background: #fee2e2; color: #b91c1c; padding: 2px 8px; border-radius: 12px; font-weight: 800;">
+                    @(_transactions?.Count(t => t.Type == TransactionType.Payment) ?? 0) حركة
+                </span>
+            </div>
+            <div class="acc-kpi-value" style="color: #dc2626;">
+                -@TotalPayments.ToString("N0") ₪
+            </div>
+            <div class="acc-kpi-sub">
+                صيانة، غسيل، قطع غيار، محروقات، ترخيص، وتأمين
+            </div>
+        </div>
+
+        <!-- 4. Net Operating Profit -->
+        <div class="acc-kpi-card net-profit">
+            <div class="acc-kpi-label" style="color: #7e22ce;">
+                <span>📈 صافي الربح التشغيلي</span>
+                <span style="font-size: 0.72rem; background: @(NetOperatingProfit >= 0 ? "#f3e8ff" : "#fee2e2"); color: @(NetOperatingProfit >= 0 ? "#6b21a8" : "#991b1b"); padding: 2px 8px; border-radius: 12px; font-weight: 800;">
+                    @(NetOperatingProfit >= 0 ? "أرباح محققة ✓" : "عجز مصاريف ⚠️")
+                </span>
+            </div>
+            <div class="acc-kpi-value" style="color: @(NetOperatingProfit >= 0 ? "#7e22ce" : "#e11d48");">
+                @(NetOperatingProfit >= 0 ? "+" : "")@NetOperatingProfit.ToString("N0") ₪
+            </div>
+            <div class="acc-kpi-sub">
+                ناتج أعمالك الصافي المحقق (المقبوضات - المصاريف)
+            </div>
+        </div>
+
+        <!-- 5. Customer Outstanding Debts -->
+        <div class="acc-kpi-card debts" style="cursor: pointer;" @onclick='() => _currentTab = "debts"' title="اضغط لفتح كشف ديون العملاء والتواصل معهم">
+            <div class="acc-kpi-label" style="color: #c2410c;">
+                <span>💳 ديون العملاء بالسوق</span>
+                <span style="font-size: 0.72rem; background: #ffedd5; color: #ea580c; padding: 2px 8px; border-radius: 12px; font-weight: 800;">
+                    @(CustomersWithDebts.Count) عملاء مدينون 👈
+                </span>
+            </div>
+            <div class="acc-kpi-value" style="color: #ea580c;">
+                @TotalCustomerDebts.ToString("N0") ₪
+            </div>
+            <div class="acc-kpi-sub">
+                مستحقات آجلة للشركة بالخارج قيد المتابعة والتحصيل
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Owner Clarity Banner -->
+    <div class="acc-executive-banner">
+        <div style="display: flex; align-items: center; gap: 10px; font-size: 0.92rem;">
+            <span style="font-size: 1.25rem;">💡</span>
+            <span>
+                <strong>الموقف المالي السريع:</strong>
+                إجمالي حقوقك الحالية (الكاش + ديون الزبائن) = <span style="color: #86efac; font-weight: 900; font-size: 1.05rem;">@((LiveCashInDrawer + TotalCustomerDebts).ToString("N0")) ₪</span>
+                | إجمالي ما صُرف = <span style="color: #fca5a5; font-weight: 900; font-size: 1.05rem;">@TotalPayments.ToString("N0") ₪</span>
+                | ربحك التشغيلي الصافي = <span style="color: #fde047; font-weight: 900; font-size: 1.05rem;">@NetOperatingProfit.ToString("N0") ₪</span>
+            </span>
+        </div>
+        <div style="font-size: 0.8rem; color: #94a3b8; display: flex; align-items: center; gap: 8px;">
+            <span>آخر تحديث تلقائي: @DateTime.Now.ToString("hh:mm tt")</span>
+            <button class="filter-pill" style="background: rgba(255,255,255,0.15); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); padding: 2px 8px; font-size: 0.75rem;" @onclick="LoadAccountingData">
+                🔄 تحديث
+            </button>
+        </div>
+    </div>
+
+    <!-- =========================================================================
+         TAB 1: Daily Cash Shift Register & History (الصندوق والورديات)
+         ========================================================================= -->
+    @if (_currentTab == "shift")
+    {
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+            
+            <!-- 1. Master Active Shift Command Box -->
+            @if (_currentShift != null && !_currentShift.IsClosed)
+            {
+                <div class="acc-shift-hero">
+                    <!-- Top Status Strip -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="background: #e0f2fe; color: #0284c7; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+                                💼
+                            </div>
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <h3 style="margin: 0; font-size: 1.2rem; font-weight: 900; color: #0f172a;">صندوق الوردية المفتوحة حالياً</h3>
+                                    <span style="background: #dcfce7; color: #166534; border: 1.5px solid #86efac; padding: 2px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 800; display: inline-flex; align-items: center; gap: 5px;">
+                                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #16a34a; animation: pulse 2s infinite;"></span>
+                                        نشط ومفتوح
+                                    </span>
+                                </div>
+                                <div style="font-size: 0.82rem; color: #64748b; margin-top: 2px;">
+                                    الموظف المسؤول: <strong style="color: #0f172a;">@_currentShift.StaffFullName</strong>
+                                    | وقت وتاريخ الافتتاح: <strong>@_currentShift.OpenedAt.ToString("yyyy/MM/dd hh:mm tt")</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Shift Drawer Quick Buttons -->
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <button class="btn-primary-action" style="background: #15803d; border-color: #166534; padding: 8px 14px; font-size: 0.85rem;" @onclick="OpenAddCashReceiptModal">
+                                <span>📥 توريد كاش للدرج</span>
+                            </button>
+                            <button class="btn-primary-action" style="background: #dc2626; border-color: #b91c1c; padding: 8px 14px; font-size: 0.85rem;" @onclick="OpenAddCashExpenseModal">
+                                <span>💸 صرف نقدية من الدرج</span>
+                            </button>
+                            <button class="btn-primary-action" style="background: #d97706; border-color: #b45309; padding: 8px 16px; font-weight: 900; font-size: 0.88rem; box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25);" @onclick="OpenCloseShiftModal">
+                                <span>🔒 إغلاق وتسليم الوردية وجرد الدرج</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 3 Master Numeric Cards -->
+                    <div class="acc-shift-metrics-grid">
+                        <!-- Box A: Opening Float -->
+                        <div class="acc-shift-box">
+                            <span style="font-size: 0.82rem; font-weight: 700; color: #475569;">1. العهدة الافتتاحية (رأس مال الدرج):</span>
+                            <div style="font-size: 1.6rem; font-weight: 900; color: #2563eb; margin: 6px 0;">
+                                @_currentShift.OpeningBalance.ToString("N0") ₪
+                            </div>
+                            <span style="font-size: 0.74rem; color: #64748b;">النقدية التي بدأ بها الموظف دوامه</span>
+                        </div>
+
+                        <!-- Box B: Shift Net Cash -->
+                        <div class="acc-shift-box">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 0.82rem; font-weight: 700; color: #475569;">2. صافي حركات الوردية نقدياً:</span>
+                                <span style="font-size: 0.75rem; font-weight: 800; color: @(_currentShift.SystemCalculatedCash >= 0 ? "#16a34a" : "#dc2626");">
+                                    @(_currentShift.SystemCalculatedCash >= 0 ? "+" : "")@_currentShift.SystemCalculatedCash.ToString("N0") ₪
+                                </span>
+                            </div>
+                            <div style="margin: 8px 0; font-size: 0.84rem; display: flex; flex-direction: column; gap: 4px;">
+                                <div style="display: flex; justify-content: space-between; color: #166534; font-weight: 700;">
+                                    <span>مقبوضات كاش داخلة:</span>
+                                    <span>+@CurrentShiftCashIn.ToString("N0") ₪</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; color: #dc2626; font-weight: 700;">
+                                    <span>مصروفات كاش خارجة:</span>
+                                    <span>-@CurrentShiftCashOut.ToString("N0") ₪</span>
+                                </div>
+                            </div>
+                            <span style="font-size: 0.74rem; color: #64748b;">الفرق بين المقبوضات والمصروفات النقدية</span>
+                        </div>
+
+                        <!-- Box C: Expected Cash in Drawer -->
+                        <div class="acc-shift-box highlight">
+                            <span style="font-size: 0.85rem; font-weight: 800; color: #e0f2fe;">3. النقد المتوقع وجوده في الدرج الآن:</span>
+                            <div style="font-size: 2.1rem; font-weight: 900; color: #ffffff; margin: 6px 0; letter-spacing: -0.5px;">
+                                @((_currentShift.OpeningBalance + _currentShift.SystemCalculatedCash).ToString("N0")) ₪
+                            </div>
+                            <span style="font-size: 0.76rem; color: #bae6fd; line-height: 1.4;">
+                                = العهدة الافتتاحية (@_currentShift.OpeningBalance.ToString("N0") ₪) + مقبوضات كاش (@CurrentShiftCashIn.ToString("N0") ₪) - مصروفات كاش (@CurrentShiftCashOut.ToString("N0") ₪)
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <!-- Closed Shift Prompt -->
+                <div style="background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 16px; padding: 40px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                    <div style="font-size: 3rem;">🔐</div>
+                    <h3 style="font-size: 1.25rem; font-weight: 900; color: #0f172a; margin: 0;">الصندوق مغلق حالياً، لا توجد وردية نشطة</h3>
+                    <p style="font-size: 0.88rem; color: #64748b; max-width: 500px; margin: 0; line-height: 1.5;">
+                        لبدء استلام النقد وتسجيل المقبوضات والمصروفات اليومية بدقة، يرجى افتتاح الوردية وتحديد العهدة الافتتاحية للصندوق.
+                    </p>
+                    <button class="btn-primary-action" style="padding: 12px 28px; font-weight: 800; font-size: 0.95rem; margin-top: 6px;" @onclick="() => _showOpenShiftModal = true">
+                        💰 افتتاح الصندوق وبدء الوردية الآن
+                    </button>
+                </div>
+            }
+
+            <!-- 2. Interactive Shift Sub-Section Switcher -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div class="acc-tabs-bar" style="background: #e2e8f0;">
+                    <button class="acc-tab-btn @(_shiftSubView == "current_feed" ? "active" : "")" @onclick='() => _shiftSubView = "current_feed"'>
+                        <span>📋 حركات الوردية الحالية اللحظية (@CurrentShiftTransactions.Count)</span>
+                    </button>
+                    <button class="acc-tab-btn @(_shiftSubView == "archive" ? "active" : "")" @onclick='() => _shiftSubView = "archive"'>
+                        <span>🗄️ أرشيف إغلاقات الصناديق والورديات السابقة (@(_allShifts?.Count(s => s.IsClosed) ?? 0))</span>
+                    </button>
+                </div>
+
+                <div style="font-size: 0.82rem; color: #64748b;">
+                    @if (_shiftSubView == "current_feed")
+                    {
+                        <span>يعرض جميع القيود التي تمت أثناء دوام الموظف الحالي في الصندوق</span>
+                    }
+                    else
+                    {
+                        <span>سجل إغلاق الصناديق، مبالغ التسليم الفعلية، ومطابقات الجرد التاريخية</span>
+                    }
+                </div>
+            </div>
+
+            <!-- SUB-VIEW 1: Current Shift Live Transactions Feed -->
+            @if (_shiftSubView == "current_feed")
+            {
+                <div class="acc-modern-table-container">
+                    <table class="acc-modern-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 140px;">رقم السند</th>
+                                <th style="width: 130px;">الوقت</th>
+                                <th style="width: 120px;">نوع الحركة</th>
+                                <th class="text-start">البيان والتفاصيل</th>
+                                <th style="width: 140px;">الطرف / المستفيد</th>
+                                <th style="width: 150px;">السيارة</th>
+                                <th style="width: 130px;">المبلغ (₪)</th>
+                                <th style="width: 110px;">طريقة الدفع</th>
+                                <th style="width: 80px;">سند</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (CurrentShiftTransactions.Any())
+                            {
+                                @foreach (var t in CurrentShiftTransactions)
+                                {
+                                    <tr style="background: @(t.Type == TransactionType.Receipt ? "#ffffff" : "#fffcfc");">
+                                        <td>
+                                            <span class="acc-voucher-badge">@t.ReceiptNumber</span>
+                                        </td>
+                                        <td style="font-size: 0.82rem; color: #475569;">
+                                            @t.TransactionDateTime.ToString("hh:mm tt")
+                                        </td>
+                                        <td>
+                                            @if (t.Type == TransactionType.Receipt)
+                                            {
+                                                <span style="background: #dcfce7; color: #166534; border: 1px solid #86efac; padding: 2px 8px; border-radius: 6px; font-weight: 800; font-size: 0.78rem;">
+                                                    قبض إيراد (+)
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span style="background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; padding: 2px 8px; border-radius: 6px; font-weight: 800; font-size: 0.78rem;">
+                                                    صرف مصروف (-)
+                                                </span>
+                                            }
+                                        </td>
+                                        <td class="text-start">
+                                            <bdi class="bidi-text" style="font-weight: 600; color: #0f172a; display: block;">
+                                                @t.Description
+                                            </bdi>
+                                            <span style="font-size: 0.75rem; color: #64748b;">
+                                                التصنيف: @GetCategoryLabel(t.Category)
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span style="font-weight: 700; color: #334155; font-size: 0.84rem;">
+                                                @(string.IsNullOrWhiteSpace(t.PayeeOrVendor) ? (t.Customer?.FullName ?? "-") : t.PayeeOrVendor)
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (t.Vehicle != null)
+                                            {
+                                                <button class="icon-btn-subtle" style="font-size: 0.78rem; font-weight: 800; color: #0284c7; background: #f0f9ff; border: 1px solid #bae6fd; padding: 2px 8px; border-radius: 6px;" title="عرض الملف المالي للسيارة" @onclick="() => OpenVehicleProfileById(t.VehicleId!.Value)">
+                                                    🚗 @t.Vehicle.Brand (@t.Vehicle.PlateNumber)
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <span style="color: #94a3b8; font-size: 0.8rem;">- عام -</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <span class="nowrap-num" style="font-weight: 900; font-size: 1.05rem; color: @(t.Type == TransactionType.Receipt ? "#16a34a" : "#dc2626");">
+                                                @(t.Type == TransactionType.Receipt ? "+" : "-")@t.Amount.ToString("N0") ₪
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span style="font-size: 0.78rem; background: #f1f5f9; padding: 2px 8px; border-radius: 6px; font-weight: 700; color: #334155;">
+                                                @GetPaymentModeLabel(t.PaymentMethod)
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="icon-btn-subtle" title="طباعة سند مالي رسمي" @onclick="() => _printVoucherTransaction = t">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                                                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                                    <rect x="6" y="14" width="12" height="8"></rect>
+                                                </svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="9" style="text-align: center; padding: 45px 20px; color: #64748b;">
+                                        <div style="font-size: 2rem; margin-bottom: 8px;">✨</div>
+                                        <div style="font-weight: 800; font-size: 1rem; color: #0f172a;">لا توجد حركات مالية مسجلة في هذه الوردية حتى الآن</div>
+                                        <div style="font-size: 0.82rem; margin-top: 4px;">أي سند قبض أو صرف يتم تسجيله خلال الدوام الحالي سيظهر هنا فوراً.</div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <!-- SUB-VIEW 2: Shifts Closures Archive -->
+            @if (_shiftSubView == "archive")
+            {
+                <div class="acc-modern-table-container">
+                    <table class="acc-modern-table">
+                        <thead>
+                            <tr>
+                                <th>الموظف المستلم</th>
+                                <th>وقت الافتتاح</th>
+                                <th>وقت الإغلاق والتسليم</th>
+                                <th>العهدة الافتتاحية</th>
+                                <th>صافي حركات الوردية</th>
+                                <th>المبلغ الفعلي المسلم</th>
+                                <th>فارق الجرد (عجز / فائض)</th>
+                                <th>ملاحظات التسليم</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_allShifts != null && _allShifts.Any(sh => sh.IsClosed))
+                            {
+                                @foreach (var s in _allShifts.Where(sh => sh.IsClosed).OrderByDescending(sh => sh.ClosedAt ?? sh.OpenedAt))
+                                {
+                                    <tr>
+                                        <td style="font-weight: 800; color: #0f172a;">@s.StaffFullName</td>
+                                        <td style="font-size: 0.82rem; color: #475569;">@s.OpenedAt.ToString("yyyy/MM/dd HH:mm")</td>
+                                        <td style="font-size: 0.82rem; color: #475569;">@s.ClosedAt?.ToString("yyyy/MM/dd HH:mm")</td>
+                                        <td style="font-weight: 800; color: #2563eb;">@s.OpeningBalance.ToString("N0") ₪</td>
+                                        <td style="font-weight: 800; color: @(s.SystemCalculatedCash >= 0 ? "#16a34a" : "#dc2626");">
+                                            @(s.SystemCalculatedCash >= 0 ? "+" : "")@s.SystemCalculatedCash.ToString("N0") ₪
+                                        </td>
+                                        <td style="font-weight: 900; color: #0f172a; font-size: 1rem;">
+                                            @s.ClosingBalanceActual?.ToString("N0") ₪
+                                        </td>
+                                        <td>
+                                            @if (s.Discrepancy == 0)
+                                            {
+                                                <span style="background: #dcfce7; color: #166534; border: 1px solid #86efac; padding: 3px 10px; border-radius: 6px; font-weight: 800; font-size: 0.78rem;">
+                                                    مطابق تماماً ✓ (0 ₪)
+                                                </span>
+                                            }
+                                            else if (s.Discrepancy < 0)
+                                            {
+                                                <span style="background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; padding: 3px 10px; border-radius: 6px; font-weight: 800; font-size: 0.78rem;">
+                                                    عجز (@s.Discrepancy.ToString("N0") ₪) ⚠️
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span style="background: #fef9c3; color: #854d0e; border: 1px solid #fde047; padding: 3px 10px; border-radius: 6px; font-weight: 800; font-size: 0.78rem;">
+                                                    فائض (+@s.Discrepancy.ToString("N0") ₪) 🌟
+                                                </span>
+                                            }
+                                        </td>
+                                        <td style="font-size: 0.8rem; color: #64748b; max-width: 250px;">
+                                            @(string.IsNullOrWhiteSpace(s.Notes) ? "-" : s.Notes)
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="8" style="text-align: center; padding: 45px 20px; color: #64748b;">
+                                        لا توجد سجلات إغلاق سابقة في الأرشيف حتى الآن.
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- =========================================================================
+         TAB 2: Financial Transactions Ledger (سجل المقبوضات والمصروفات المطور)
+         ========================================================================= -->
+    @if (_currentTab == "transactions")
+    {
+        <div class="acc-modern-table-container">
+            
+            <!-- Filters & Search Bar -->
+            <div style="padding: 16px 20px; background: #ffffff; border-bottom: 1.5px solid #e2e8f0; display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+                
+                <!-- Quick Filter Pills: All / In / Out -->
+                <div class="acc-tabs-bar" style="background: #f1f5f9;">
+                    <button class="acc-tab-btn @(_txFilterType == "All" ? "active" : "")" @onclick='() => _txFilterType = "All"'>
+                        <span>🔘 الكل (@(_transactions?.Count ?? 0))</span>
+                    </button>
+                    <button class="acc-tab-btn @(_txFilterType == "Receipt" ? "active" : "")" @onclick='() => _txFilterType = "Receipt"'>
+                        <span>📥 المقبوضات (إيرادات +)</span>
+                    </button>
+                    <button class="acc-tab-btn @(_txFilterType == "Payment" ? "active" : "")" @onclick='() => _txFilterType = "Payment"'>
+                        <span>💸 المصروفات (نفقات -)</span>
+                    </button>
+                </div>
+
+                <!-- Category Filter -->
+                <select @bind="_txFilterCategory" style="padding: 8px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; font-weight: 600; color: #0f172a; outline: none; background: #ffffff;">
+                    <option value="All">📂 جميع بنود التصنيف</option>
+                    <option value="@TransactionCategory.RentalPayment">🚗 إيجار مركبات</option>
+                    <option value="@TransactionCategory.ContractExtension">⏱️ تمديد عقود</option>
+                    <option value="@TransactionCategory.CarMaintenance">🔧 صيانة وإصلاحات</option>
+                    <option value="@TransactionCategory.CarWash">🧼 غسيل وتنظيف</option>
+                    <option value="@TransactionCategory.CarInsurance">🛡️ تأمين مركبات</option>
+                    <option value="@TransactionCategory.CarLicensing">📋 ترخيص وديناموميتر</option>
+                    <option value="@TransactionCategory.SpareParts">⚙️ قطع غيار ومستلزمات</option>
+                    <option value="@TransactionCategory.Fuel">⛽ وقود ومحروقات</option>
+                    <option value="@TransactionCategory.DebtPayment">💳 سداد ديون عملاء</option>
+                    <option value="@TransactionCategory.GeneralOfficeExpense">🏢 مصاريف عامة وإدارية</option>
+                    <option value="@TransactionCategory.OfficeExpense">☕ فواتير ومكتب</option>
+                </select>
+
+                <!-- Payment Method Filter -->
+                <select @bind="_txFilterPaymentMode" style="padding: 8px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; font-weight: 600; color: #0f172a; outline: none; background: #ffffff;">
+                    <option value="All">💳 جميع طرق الدفع</option>
+                    <option value="@PaymentMode.ImmediateCash">💵 نقدي (كاش)</option>
+                    <option value="@PaymentMode.CreditCard">💳 فيزا / بطاقة</option>
+                    <option value="@PaymentMode.BankTransfer">🏦 تحويل بنكي</option>
+                </select>
+
+                <!-- Search Input -->
+                <div style="position: relative; flex: 1; min-width: 240px;">
+                    <input type="text" @bind="_txSearch" @bind:event="oninput" placeholder="🔍 بحث برقم السند، البيان، اسم العميل، الورشة، أو اللوحة..." style="width: 100%; padding: 8px 14px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; outline: none;" />
+                    @if (!string.IsNullOrWhiteSpace(_txSearch))
+                    {
+                        <button style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); border: none; background: transparent; color: #94a3b8; cursor: pointer;" @onclick='() => _txSearch = ""'>✕</button>
+                    }
+                </div>
+            </div>
+
+            <!-- Live Subtotals Ribbon for Filtered Results -->
+            <div class="acc-subtotals-ribbon">
+                <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                    <div style="font-size: 0.85rem;">
+                        <span style="color: #64748b;">إجمالي المقبوضات المعروضة:</span>
+                        <strong style="color: #15803d; font-size: 1rem; margin-right: 4px;">+@FilteredReceiptsSum.ToString("N0") ₪</strong>
+                    </div>
+                    <div style="font-size: 0.85rem;">
+                        <span style="color: #64748b;">إجمالي المصروفات المعروضة:</span>
+                        <strong style="color: #dc2626; font-size: 1rem; margin-right: 4px;">-@FilteredPaymentsSum.ToString("N0") ₪</strong>
+                    </div>
+                    <div style="font-size: 0.85rem;">
+                        <span style="color: #64748b;">الصافي للنتائج المعروضة:</span>
+                        <strong style="color: @(FilteredNetSum >= 0 ? "#0284c7" : "#dc2626"); font-size: 1rem; margin-right: 4px;">
+                            @(FilteredNetSum >= 0 ? "+" : "")@FilteredNetSum.ToString("N0") ₪
+                        </strong>
+                    </div>
+                </div>
+
+                <div style="font-size: 0.82rem; color: #64748b; font-weight: 700;">
+                    المعروض: <strong style="color: #0f172a;">@FilteredTransactions.Count</strong> قيد مالي
+                </div>
+            </div>
+
+            <!-- Ledger Table -->
+            <table class="acc-modern-table">
+                <thead>
+                    <tr>
+                        <th style="width: 140px;">السند والتاريخ</th>
+                        <th style="width: 130px;">نوع القيد</th>
+                        <th class="text-start">البيان والتفاصيل والطرف</th>
+                        <th style="width: 180px;">السيارة المعنية</th>
+                        <th style="width: 140px;">المبلغ وطريقة الدفع</th>
+                        <th style="width: 110px;">الموظف</th>
+                        <th style="width: 80px;">طباعة</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (FilteredTransactions.Any())
+                    {
+                        @foreach (var t in FilteredTransactions)
+                        {
+                            <tr style="background: @(t.Type == TransactionType.Receipt ? "#ffffff" : "#fffcfc");">
+                                <td>
+                                    <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                                        <span class="acc-voucher-badge">@t.ReceiptNumber</span>
+                                        <span style="font-size: 0.76rem; color: #64748b;">
+                                            @t.TransactionDateTime.ToString("yyyy/MM/dd HH:mm")
+                                        </span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                                        @if (t.Type == TransactionType.Receipt)
+                                        {
+                                            <span style="background: #dcfce7; color: #166534; border: 1px solid #86efac; padding: 2px 10px; border-radius: 6px; font-weight: 800; font-size: 0.78rem;">
+                                                قبض إيراد (+)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span style="background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; padding: 2px 10px; border-radius: 6px; font-weight: 800; font-size: 0.78rem;">
+                                                صرف ونفقة (-)
+                                            </span>
+                                        }
+                                        <span style="font-size: 0.74rem; color: #475569; font-weight: 700;">
+                                            @GetCategoryLabel(t.Category)
+                                        </span>
+                                    </div>
+                                </td>
+                                <td class="text-start">
+                                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                                        <!-- Text Isolated from Bidi Reversals -->
+                                        <bdi class="bidi-text" style="font-weight: 700; color: #0f172a; font-size: 0.88rem;">
+                                            @t.Description
+                                        </bdi>
+                                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 0.78rem; color: #475569;">
+                                            @if (!string.IsNullOrWhiteSpace(t.PayeeOrVendor) || t.Customer != null)
+                                            {
+                                                <span style="background: #f1f5f9; padding: 1px 8px; border-radius: 4px; font-weight: 600;">
+                                                    👤 الطرف: <strong>@(string.IsNullOrWhiteSpace(t.PayeeOrVendor) ? t.Customer?.FullName : t.PayeeOrVendor)</strong>
+                                                </span>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(t.InvoiceNumber))
+                                            {
+                                                <span style="background: #fef3c7; color: #92400e; padding: 1px 6px; border-radius: 4px; font-weight: 700; font-family: monospace;">
+                                                    #فاتورة: @t.InvoiceNumber
+                                                </span>
+                                            }
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    @if (t.Vehicle != null)
+                                    {
+                                        <button class="icon-btn-subtle" style="font-size: 0.8rem; font-weight: 800; color: #0284c7; background: #f0f9ff; border: 1.5px solid #bae6fd; padding: 3px 10px; border-radius: 6px; width: 100%;" title="عرض الملف المالي للسيارة" @onclick="() => OpenVehicleProfileById(t.VehicleId!.Value)">
+                                            🚗 @t.Vehicle.Brand <span style="font-family: monospace; font-size: 0.78rem; display: block; color: #0369a1;">(@t.Vehicle.PlateNumber)</span>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span style="color: #94a3b8; font-size: 0.82rem;">- عام -</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+                                        <span class="nowrap-num" style="font-weight: 900; font-size: 1.15rem; color: @(t.Type == TransactionType.Receipt ? "#16a34a" : "#dc2626");">
+                                            @(t.Type == TransactionType.Receipt ? "+" : "-")@t.Amount.ToString("N0") ₪
+                                        </span>
+                                        <span style="font-size: 0.74rem; background: #f8fafc; border: 1px solid #e2e8f0; padding: 1px 6px; border-radius: 4px; color: #475569; font-weight: 600;">
+                                            @GetPaymentModeLabel(t.PaymentMethod)
+                                        </span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span style="font-size: 0.82rem; font-weight: 700; color: #334155;">
+                                        @t.StaffUsername
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="icon-btn-subtle" title="طباعة سند مالي رسمي" @onclick="() => _printVoucherTransaction = t" style="padding: 6px 10px;">
+                                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                            <rect x="6" y="14" width="12" height="8"></rect>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 50px 20px; color: #64748b;">
+                                <div style="font-size: 2.2rem; margin-bottom: 8px;">🔍</div>
+                                <div style="font-weight: 800; font-size: 1.05rem; color: #0f172a;">لا توجد حركات مالية مطابقة لشروط البحث والتصفية</div>
+                                <div style="font-size: 0.82rem; margin-top: 4px;">جرب تغيير خيارات التصفية أو تفريغ حقل البحث.</div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <!-- =========================================================================
+         TAB 3: Customer Outstanding Debts (كشف ديون العملاء - شو إلك في السوق)
+         ========================================================================= -->
+    @if (_currentTab == "debts")
+    {
+        <div class="acc-modern-table-container">
+            <div style="padding: 16px 20px; background: #fff7ed; border-bottom: 1.5px solid #fed7aa; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.5rem;">💳</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.05rem; font-weight: 900; color: #9a3412;">
+                            كشف ديون العملاء والذمم المستحقة (شو إلك في السوق)
+                        </h3>
+                        <span style="font-size: 0.8rem; color: #c2410c;">
+                            أموال الشركة المعلقة لدى الزبائن - اضغط "قبض وسداد" لتحصيل أي مبلغ فوراً
+                        </span>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <input type="text" @bind="_debtSearch" @bind:event="oninput" placeholder="🔍 بحث باسم العميل أو رقم الهاتف أو الهوية..." style="padding: 7px 14px; border-radius: 8px; border: 1.5px solid #fdba74; font-size: 0.85rem; width: 280px; background: #ffffff;" />
+                    <div style="font-weight: 900; font-size: 1.05rem; color: #c2410c; background: #ffedd5; padding: 6px 14px; border-radius: 8px; border: 1px solid #fed7aa;">
+                        الإجمالي: @TotalCustomerDebts.ToString("N0") ₪
+                    </div>
+                </div>
+            </div>
+
+            <table class="acc-modern-table">
+                <thead>
+                    <tr>
+                        <th class="text-start">اسم العميل</th>
+                        <th>رقم الهوية / الجواز</th>
+                        <th>رقم الهاتف للتواصل</th>
+                        <th>العنوان</th>
+                        <th>مبلغ الدين المستحق (₪)</th>
+                        <th>إجراءات التحصيل</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (FilteredDebtors.Any())
+                    {
+                        @foreach (var c in FilteredDebtors)
+                        {
+                            <tr>
+                                <td class="text-start">
+                                    <div style="font-weight: 800; font-size: 0.95rem; color: #0f172a;">
+                                        @c.FullName
+                                    </div>
+                                    <span style="font-size: 0.75rem; color: #64748b;">
+                                        تاريخ التسجيل: @c.CreatedAt.ToString("yyyy/MM/dd")
+                                    </span>
+                                </td>
+                                <td style="font-family: monospace; font-weight: 700; color: #475569;">
+                                    @c.NationalIdOrPassport
+                                </td>
+                                <td>
+                                    <a href="tel:@c.PrimaryPhone" style="font-family: monospace; font-weight: 800; color: #0284c7; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                        📞 @c.PrimaryPhone
+                                    </a>
+                                </td>
+                                <td style="font-size: 0.82rem; color: #64748b;">
+                                    @(string.IsNullOrWhiteSpace(c.Address) ? "-" : c.Address)
+                                </td>
+                                <td>
+                                    <span class="nowrap-num" style="font-weight: 900; font-size: 1.25rem; color: #ea580c; background: #fff7ed; padding: 4px 12px; border-radius: 8px; border: 1px solid #fed7aa;">
+                                        @c.TotalDebts.ToString("N0") ₪
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn-primary-action" style="background: #15803d; border-color: #166534; padding: 6px 14px; font-weight: 800; font-size: 0.82rem; gap: 6px;" @onclick="() => CollectCustomerDebt(c)">
+                                        <span>📥 قبض وسداد دين</span>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 45px 20px; color: #64748b;">
+                                <div style="font-size: 2rem; margin-bottom: 8px;">🎉</div>
+                                <div style="font-weight: 800; font-size: 1.05rem; color: #0f172a;">لا توجد ديون مستحقة بذمة العملاء!</div>
+                                <div style="font-size: 0.82rem; margin-top: 4px;">كافة مستحقات الشركة محصلة بالكامل.</div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <!-- =========================================================================
+         TAB 4: Fleet Profitability Report (كشف ربحية سيارات الأسطول)
+         ========================================================================= -->
+    @if (_currentTab == "profitability")
+    {
+        <div class="acc-modern-table-container">
+            <div style="padding: 16px 20px; font-weight: bold; border-bottom: 1.5px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+                <div>
+                    <span style="color: #0f172a; font-weight: 900; font-size: 1.05rem;">كشف ربحية وتحليل إيرادات ومصروفات كل مركبة بالأسطول</span>
+                    <div style="font-size: 0.8rem; color: #64748b;">اضغط على أي مركبة لفتح ملفها المالي التفصيلي المطبوع</div>
+                </div>
+                <span style="font-size: 0.85rem; color: #64748b; font-weight: 700;">مجموع المركبات المسجلة: @(_profitability?.Count ?? 0)</span>
+            </div>
+            <table class="acc-modern-table">
+                <thead>
+                    <tr>
+                        <th class="text-start">المركبة والطراز</th>
+                        <th>رقم اللوحة</th>
+                        <th>إجمالي أيام التأجير</th>
+                        <th>إجمالي الإيرادات (₪)</th>
+                        <th>إجمالي المصاريف والصيانة (₪)</th>
+                        <th>صافي الربح المحقق (₪)</th>
+                        <th>مستوى الربحية</th>
+                        <th>الملف المالي الكامل</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_profitability != null && _profitability.Any())
+                    {
+                        @foreach (var p in _profitability)
+                        {
+                            <tr>
+                                <td class="text-start" style="font-weight: 800; color: #0f172a;">@p.BrandAndModel</td>
+                                <td style="font-family: monospace; color: #0284c7; font-weight: 800;">@p.PlateNumber</td>
+                                <td style="font-weight: 700;">@p.TotalRentalDays يوم</td>
+                                <td style="color: #16a34a; font-weight: 800;">+@p.TotalRevenue.ToString("N0") ₪</td>
+                                <td style="color: #dc2626; font-weight: 800;">-@p.TotalExpenses.ToString("N0") ₪</td>
+                                <td>
+                                    <span class="nowrap-num" style="font-weight: 900; font-size: 1.15rem; color: @(p.NetProfit >= 0 ? "#2563eb" : "#dc2626");">
+                                        @p.NetProfit.ToString("N0") ₪
+                                    </span>
+                                </td>
+                                <td>
+                                    @if (p.NetProfit > 2000)
+                                    {
+                                        <span style="background: #dcfce7; color: #166534; border: 1px solid #86efac; padding: 3px 10px; border-radius: 6px; font-weight: 800; font-size: 0.78rem;">
+                                            ربحية ممتازة ★★★
+                                        </span>
+                                    }
+                                    else if (p.NetProfit >= 0)
+                                    {
+                                        <span style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; padding: 3px 10px; border-radius: 6px; font-weight: 800; font-size: 0.78rem;">
+                                            ربحية مقبولة ★★
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span style="background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; padding: 3px 10px; border-radius: 6px; font-weight: 800; font-size: 0.78rem;">
+                                            عجز مصاريف ⚠️
+                                        </span>
+                                    }
+                                </td>
+                                <td>
+                                    <button class="btn-primary-action" style="padding: 6px 14px; font-size: 0.8rem; font-weight: 800; background: #059669; border: 1px solid #059669; border-radius: 6px; gap: 4px;" @onclick="() => OpenVehicleProfileById(p.VehicleId)">
+                                        <span>الملف المالي 💰</span>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="8" style="text-align: center; padding: 45px 20px; color: #64748b;">
+                                لا توجد بيانات أسطول أو تعاملات لحساب الأرباح حتى الآن.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<!-- =========================================================================
+     MODALS
+     ========================================================================= -->
+
+<!-- Modal: Open New Shift via OpenShiftModal -->
+@if (_showOpenShiftModal)
+{
+    <OpenShiftModal OnShiftOpened="async () => { _showOpenShiftModal = false; await LoadAccountingData(); }" />
+}
+
+<!-- Modal: Close Shift & Reconcile -->
+@if (_showCloseShiftModal && _currentShift != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 540px;">
+            <div class="modal-header" style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                <div class="modal-title" style="color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                    <span>🔒</span>
+                    <span>إغلاق الصندوق اليومي وجرد وتسليم الوردية</span>
+                </div>
+                <button class="btn-close-modal" @onclick="() => _showCloseShiftModal = false">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; padding: 16px; border-radius: 10px; font-size: 0.92rem; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #475569;">الموظف المسؤول المسلّم:</span>
+                        <strong style="color: #0f172a;">@_currentShift.StaffFullName</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #475569;">العهدة الافتتاحية:</span>
+                        <strong style="color: #2563eb;">@_currentShift.OpeningBalance.ToString("N0") ₪</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #475569;">صافي الحركات النقدية خلال الوردية:</span>
+                        <strong style="color: @(_currentShift.SystemCalculatedCash >= 0 ? "#16a34a" : "#dc2626");">
+                            @(_currentShift.SystemCalculatedCash >= 0 ? "+" : "")@_currentShift.SystemCalculatedCash.ToString("N0") ₪
+                        </strong>
+                    </div>
+                    <div style="border-top: 1.5px solid #cbd5e1; padding-top: 8px; margin-top: 4px; display: flex; justify-content: space-between; font-weight: 900; color: #0284c7; font-size: 1.15rem;">
+                        <span>إجمالي النقد المتوقع بالدرج:</span>
+                        <span>@((_currentShift.OpeningBalance + _currentShift.SystemCalculatedCash).ToString("N0")) ₪</span>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 16px;">
+                    <label class="form-label" style="font-weight: 800; color: #0f172a; font-size: 0.95rem;">
+                        المبلغ النقدي الفعلي الموجود بالدرج بعد العد الفعلي (₪) *:
+                    </label>
+                    <input type="number" class="form-control" @bind="_actualCashClose" style="font-size: 1.3rem; font-weight: 900; color: #0f172a; text-align: center;" />
+                </div>
+
+                @{
+                    var expected = _currentShift.OpeningBalance + _currentShift.SystemCalculatedCash;
+                    var diff = _actualCashClose - expected;
+                }
+
+                <div style="background: @(diff == 0 ? "#f0fdf4" : (diff < 0 ? "#fef2f2" : "#fefce8")); border: 1.5px solid @(diff == 0 ? "#86efac" : (diff < 0 ? "#fca5a5" : "#fde047")); border-radius: 8px; padding: 12px; text-align: center; margin-top: 8px;">
+                    <div style="font-size: 0.8rem; color: #64748b;">نتيجة مطابقة الجرد الفعلي مع النظام:</div>
+                    <div style="font-weight: 900; font-size: 1.15rem; color: @(diff == 0 ? "#16a34a" : (diff < 0 ? "#dc2626" : "#ca8a04")); margin-top: 2px;">
+                        @(diff == 0 ? "متطابق تماماً بدون أي فارق (0 ₪) ✓" : (diff < 0 ? $"عجز نقدي بالصندوق بمقدار ({Math.Abs(diff):N0} ₪) ⚠️" : $"فائض نقدي بالصندوق بمقدار (+{diff:N0} ₪) 🌟"))
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 12px;">
+                    <label class="form-label" style="font-weight: 700;">ملاحظات الإغلاق والتسليم:</label>
+                    <input type="text" class="form-control" @bind="_closeNotes" placeholder="تم تسليم النقدية للإدارة / لا توجد فوارق..." />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="filter-pill" @onclick="() => _showCloseShiftModal = false">إلغاء</button>
+                <button class="btn-primary-action" style="background: #dc2626; border-color: #b91c1c; font-weight: 900;" @onclick="ConfirmCloseShift">
+                    اعتماد الإغلاق وترحيل الصندوق 🔒
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal: Comprehensive Expense Entry -->
+@if (_showExpenseModal)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 620px;">
+            <div class="modal-header" style="background: #fef2f2; border-bottom: 2px solid #fca5a5;">
+                <div class="modal-title" style="color: #dc2626; display: flex; align-items: center; gap: 8px;">
+                    <span>💸</span>
+                    <span>تسجيل سند صرف ونفقة (كل شيكل يُصرف)</span>
+                </div>
+                <button class="btn-close-modal" @onclick="() => _showExpenseModal = false">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">المبلغ المصروف (₪) *:</label>
+                        <input type="number" class="form-control" @bind="_expenseAmount" min="1" style="font-weight: 900; font-size: 1.25rem; color: #dc2626;" placeholder="مثال: 50" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">تصنيف المصروف *:</label>
+                        <select class="form-control" @bind="_expenseCategory">
+                            <option value="@TransactionCategory.CarWash">🧼 غسيل وتنظيف مركبات</option>
+                            <option value="@TransactionCategory.CarMaintenance">🔧 صيانة وتصليح</option>
+                            <option value="@TransactionCategory.CarInsurance">🛡️ تأمين المركبة</option>
+                            <option value="@TransactionCategory.CarLicensing">📋 ترخيص وفحص ديناموميتر</option>
+                            <option value="@TransactionCategory.SpareParts">⚙️ قطع غيار ومستلزمات</option>
+                            <option value="@TransactionCategory.Fuel">⛽ وقود ومحروقات</option>
+                            <option value="@TransactionCategory.GeneralOfficeExpense">🏢 إيجار ومصروفات إدارية</option>
+                            <option value="@TransactionCategory.OfficeExpense">☕ ضيافة ونظافة ومستلزمات</option>
+                            <option value="@TransactionCategory.Other">📦 أخرى</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" style="font-weight: 700;">المركبة المعنية بالمصروف (إن وُجد):</label>
+                    <select class="form-control" @bind="_expenseVehicleIdString">
+                        <option value="">-- مصروف عام (غير مخصص لمركبة محددة) --</option>
+                        @if (_vehicles != null)
+                        {
+                            @foreach (var v in _vehicles)
+                            {
+                                <option value="@v.Id.ToString()">@v.Brand @v.Model (@v.PlateNumber)</option>
+                            }
+                        }
+                    </select>
+                    <span style="font-size: 0.74rem; color: #64748b; margin-top: 2px;">
+                        عند تحديد المركبة، سيتم قيد المصروف في ملفها المالي وخصمه من أرباحها الصافية تلقائياً.
+                    </span>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">المصروف له / الورشة / المغسلة:</label>
+                        <input type="text" class="form-control" @bind="_expensePayee" placeholder="مثال: مغسلة الوفاء، كراج أبو النور..." />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">رقم الفاتورة / السند الخارجي:</label>
+                        <input type="text" class="form-control" @bind="_expenseInvoiceNumber" placeholder="مثال: فاتورة #1042" />
+                    </div>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">طريقة الصرف والدفع *:</label>
+                        <select class="form-control" @bind="_expenseMethod">
+                            <option value="@PaymentMode.ImmediateCash">💵 نقداً من الصندوق (Cash)</option>
+                            <option value="@PaymentMode.CreditCard">💳 بطاقة ائتمان / فيزا (Card)</option>
+                            <option value="@PaymentMode.BankTransfer">🏦 حوالة بنكية (Bank Transfer)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">عنوان وبند المصروف *:</label>
+                        <input type="text" class="form-control" @bind="_expenseTitle" placeholder="مثال: غسيل داخلي وخارجي، تغيير زيت..." />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">تفاصيل إضافية / بيان الصرف:</label>
+                    <textarea class="form-control" rows="2" @bind="_expenseNotes" placeholder="أية ملاحظات أو تفاصيل للمحاسبة..."></textarea>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_expenseError))
+                {
+                    <div style="background: #fee2e2; border: 1.5px solid #ef4444; color: #991b1b; padding: 8px 12px; border-radius: 6px; font-weight: bold; font-size: 0.85rem;">
+                        @_expenseError
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="filter-pill" @onclick="() => _showExpenseModal = false">إلغاء</button>
+                <button class="btn-primary-action" style="background: #dc2626; border-color: #b91c1c; font-weight: 900;" @onclick="SaveGeneralExpense">
+                    صرف المبلغ وتوليد سند الصرف 💸
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal: New Receipt Voucher (تسجيل سند قبض مالي) -->
+@if (_showReceiptModal)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 660px;">
+            <div class="modal-header" style="background: #f0fdf4; border-bottom: 2px solid #16a34a;">
+                <div class="modal-title" style="color: #15803d; display: flex; align-items: center; gap: 8px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                    <span>تسجيل سند قبض مالي رسمي (توريد نقدية إلى الصندوق)</span>
+                </div>
+                <button class="btn-close-modal" @onclick="() => _showReceiptModal = false">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">المبلغ المقبوض (₪) *:</label>
+                        <input type="number" class="form-control" @bind="_receiptAmount" min="1" style="font-weight: 900; font-size: 1.25rem; color: #15803d;" placeholder="مثال: 500" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">بند وتصنيف القبض *:</label>
+                        <select class="form-control" @bind="_receiptCategory">
+                            <option value="@TransactionCategory.RentalPayment">🚗 دفعة إيجار عقد سيارة</option>
+                            <option value="@TransactionCategory.DebtPayment">💳 سداد دين سابق لعميل (يخصم من ديونه)</option>
+                            <option value="@TransactionCategory.SecurityDeposit">🛡️ تأمين نقدي مسترد</option>
+                            <option value="@TransactionCategory.DamageCompensation">🔨 تعويض أضرار أو تصليح</option>
+                            <option value="@TransactionCategory.ContractExtension">⏱️ تمديد عقد تأجير</option>
+                            <option value="@TransactionCategory.Other">📦 إيراد / قبض عام آخر</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" style="font-weight: 700;">العميل المسجل (إن وُجد):</label>
+                    <select class="form-control" @bind="_receiptCustomerIdString" @bind:after="OnReceiptCustomerChanged">
+                        <option value="">-- عميل عام / غير مسجل في القائمة --</option>
+                        @if (_customers != null)
+                        {
+                            @foreach (var c in _customers)
+                            {
+                                <option value="@c.Id.ToString()">@c.FullName (هوية: @c.NationalIdOrPassport | ديون: @c.TotalDebts ₪)</option>
+                            }
+                        }
+                    </select>
+                    <span style="font-size: 0.74rem; color: #166534; font-weight: 700; margin-top: 2px;">
+                        ✓ عند اختيار عميل مسجل، سيتم خصم هذا المبلغ تلقائياً من ذمته وعقوده وتحديث رصيد ديونه في كامل النظام.
+                    </span>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">وصلنا من السيد / السادة (اسم الدافع):</label>
+                        <input type="text" class="form-control" @bind="_receiptPayerName" placeholder="الاسم الكامل للشخص الذي دفع المبلغ..." />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">طريقة القبض والدفع *:</label>
+                        <select class="form-control" @bind="_receiptMethod">
+                            <option value="@PaymentMode.ImmediateCash">💵 نقداً في الصندوق (Cash)</option>
+                            <option value="@PaymentMode.CreditCard">💳 بطاقة ائتمان / فيزا (Card)</option>
+                            <option value="@PaymentMode.BankTransfer">🏦 حوالة بنكية (Bank Transfer)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">المركبة المعنية (اختياري):</label>
+                        <select class="form-control" @bind="_receiptVehicleIdString">
+                            <option value="">-- غير مخصص لمركبة --</option>
+                            @if (_vehicles != null)
+                            {
+                                @foreach (var v in _vehicles)
+                                {
+                                    <option value="@v.Id.ToString()">@v.Brand @v.Model (@v.PlateNumber)</option>
+                                }
+                            }
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">رقم الشيك أو المرجع (إن وجد):</label>
+                        <input type="text" class="form-control" @bind="_receiptReferenceNumber" placeholder="مثال: شيك #5021 أو مرجع البنك..." />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" style="font-weight: 700;">عنوان وبند القبض *:</label>
+                    <input type="text" class="form-control" @bind="_receiptTitle" placeholder="مثال: دفعة إيجار، سداد حساب..." />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">تفاصيل إضافية / بيان السند:</label>
+                    <textarea class="form-control" rows="2" @bind="_receiptNotes" placeholder="أية تفاصيل إضافية تريد ظهورها في السند المطبوع..."></textarea>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_receiptError))
+                {
+                    <div style="background: #fee2e2; border: 1.5px solid #ef4444; color: #991b1b; padding: 8px 12px; border-radius: 6px; font-weight: bold; font-size: 0.85rem;">
+                        @_receiptError
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="filter-pill" @onclick="() => _showReceiptModal = false">إلغاء</button>
+                <button class="btn-primary-action" style="background: #15803d; border-color: #166534; font-weight: 900;" @onclick="SaveReceiptVoucher">
+                    حفظ واعتماد سند القبض وطباعته 📥
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Print Voucher Modal -->
+@if (_printVoucherTransaction != null)
+{
+    <CarRental.App.Components.Modals.PrintVoucherModal 
+        Transaction="_printVoucherTransaction" 
+        OnClose="() => _printVoucherTransaction = null" />
+}
+
+<!-- Vehicle Financial Dossier Modal -->
+@if (_selectedVehicleForDossier != null)
+{
+    <CarRental.App.Components.Modals.VehicleFinancialProfileModal 
+        Vehicle="_selectedVehicleForDossier" 
+        OnClose="() => _selectedVehicleForDossier = null" />
+}
+
+@code {
+    private string _currentTab = "shift";
+    private string _shiftSubView = "current_feed";
+    private DailyShift? _currentShift;
+    private List<DailyShift>? _allShifts;
+    private List<FinancialTransaction>? _transactions;
+    private List<VehicleProfitabilityDto>? _profitability;
+    private List<Vehicle>? _vehicles;
+    private List<Customer>? _customers;
+    private List<Contract>? _contracts;
+
+    // Shift management
+    private bool _showOpenShiftModal = false;
+    private decimal _newShiftOpeningBalance = 0;
+    private bool _showCloseShiftModal = false;
+    private decimal _actualCashClose = 0;
+    private string _closeNotes = "";
+
+    // Modals
+    private FinancialTransaction? _printVoucherTransaction;
+    private Vehicle? _selectedVehicleForDossier;
+
+    // Detailed Expense Form
+    private bool _showExpenseModal = false;
+    private string _expenseTitle = "";
+    private decimal _expenseAmount = 0;
+    private TransactionCategory _expenseCategory = TransactionCategory.CarWash;
+    private PaymentMode _expenseMethod = PaymentMode.ImmediateCash;
+    private string _expenseVehicleIdString = "";
+    private string _expensePayee = "";
+    private string _expenseInvoiceNumber = "";
+    private string _expenseNotes = "";
+    private string? _expenseError;
+
+    // Detailed Receipt Form (سند قبض مالي)
+    private bool _showReceiptModal = false;
+    private decimal _receiptAmount = 0;
+    private string _receiptTitle = "قبض دفعة نقدية معتمدة";
+    private TransactionCategory _receiptCategory = TransactionCategory.RentalPayment;
+    private PaymentMode _receiptMethod = PaymentMode.ImmediateCash;
+    private string _receiptCustomerIdString = "";
+    private string _receiptPayerName = "";
+    private string _receiptVehicleIdString = "";
+    private string _receiptReferenceNumber = "";
+    private string _receiptNotes = "";
+    private string? _receiptError;
+
+    // Ledger Filters
+    private string _txFilterType = "All";
+    private string _txFilterCategory = "All";
+    private string _txFilterPaymentMode = "All";
+    private string _txSearch = "";
+
+    // Debts Filter
+    private string _debtSearch = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthState.OnUserChanged += StateHasChanged;
+        await LoadAccountingData();
+    }
+
+    public void Dispose()
+    {
+        AuthState.OnUserChanged -= StateHasChanged;
+    }
+
+    private async Task LoadAccountingData()
+    {
+        _currentShift = await RentalService.GetCurrentShiftAsync(AuthState.CurrentUser.Username);
+        _allShifts = await RentalService.GetAllShiftsAsync();
+        _transactions = await RentalService.GetTransactionsAsync();
+        _profitability = await RentalService.GetVehicleProfitabilityAsync();
+        _vehicles = await RentalService.GetVehiclesAsync();
+        _customers = await RentalService.GetCustomersAsync();
+        _contracts = await RentalService.GetContractsAsync();
+
+        if (_currentShift != null)
+        {
+            _actualCashClose = _currentShift.OpeningBalance + _currentShift.SystemCalculatedCash;
+        }
+    }
+
+    // Live Metrics
+    private decimal TotalReceipts => _transactions?
+        .Where(t => t.Type == TransactionType.Receipt)
+        .Sum(t => t.Amount) ?? 0;
+
+    private decimal TotalPayments => _transactions?
+        .Where(t => t.Type == TransactionType.Payment)
+        .Sum(t => t.Amount) ?? 0;
+
+    private decimal NetOperatingProfit => TotalReceipts - TotalPayments;
+
+    private decimal LiveCashInDrawer
+    {
+        get
+        {
+            if (_currentShift == null) return 0;
+            return Math.Max(0, _currentShift.OpeningBalance + _currentShift.SystemCalculatedCash);
+        }
+    }
+
+    private decimal TotalCustomerDebts => _customers?.Sum(c => c.TotalDebts) ?? 0;
+
+    private List<Customer> CustomersWithDebts => _customers?
+        .Where(c => c.TotalDebts > 0)
+        .OrderByDescending(c => c.TotalDebts)
+        .ToList() ?? new();
+
+    private List<Customer> FilteredDebtors
+    {
+        get
+        {
+            var list = CustomersWithDebts;
+            if (string.IsNullOrWhiteSpace(_debtSearch)) return list;
+            var s = _debtSearch.Trim().ToLower();
+            return list.Where(c => 
+                c.FullName.ToLower().Contains(s) || 
+                c.NationalIdOrPassport.Contains(s) || 
+                c.PrimaryPhone.Contains(s)).ToList();
+        }
+    }
+
+    // Shift Transactions
+    private List<FinancialTransaction> CurrentShiftTransactions
+    {
+        get
+        {
+            if (_transactions == null || _currentShift == null) return new();
+            return _transactions
+                .Where(t => t.DailyShiftId == _currentShift.Id || 
+                            (t.TransactionDateTime >= _currentShift.OpenedAt && (_currentShift.ClosedAt == null || t.TransactionDateTime <= _currentShift.ClosedAt)))
+                .OrderByDescending(t => t.TransactionDateTime)
+                .ToList();
+        }
+    }
+
+    private decimal CurrentShiftCashIn => CurrentShiftTransactions
+        .Where(t => t.Type == TransactionType.Receipt && t.PaymentMethod == PaymentMode.ImmediateCash)
+        .Sum(t => t.Amount);
+
+    private decimal CurrentShiftCashOut => CurrentShiftTransactions
+        .Where(t => t.Type == TransactionType.Payment && t.PaymentMethod == PaymentMode.ImmediateCash)
+        .Sum(t => t.Amount);
+
+    // Ledger Filtered Transactions
+    private List<FinancialTransaction> FilteredTransactions
+    {
+        get
+        {
+            if (_transactions == null) return new();
+            var q = _transactions.AsEnumerable();
+
+            if (_txFilterType == "Receipt")
+                q = q.Where(t => t.Type == TransactionType.Receipt);
+            else if (_txFilterType == "Payment")
+                q = q.Where(t => t.Type == TransactionType.Payment);
+
+            if (_txFilterCategory != "All" && Enum.TryParse<TransactionCategory>(_txFilterCategory, out var cat))
+                q = q.Where(t => t.Category == cat);
+
+            if (_txFilterPaymentMode != "All" && Enum.TryParse<PaymentMode>(_txFilterPaymentMode, out var mode))
+                q = q.Where(t => t.PaymentMethod == mode);
+
+            if (!string.IsNullOrWhiteSpace(_txSearch))
+            {
+                var s = _txSearch.Trim().ToLower();
+                q = q.Where(t => 
+                    t.ReceiptNumber.ToLower().Contains(s) ||
+                    t.Description.ToLower().Contains(s) ||
+                    (t.PayeeOrVendor != null && t.PayeeOrVendor.ToLower().Contains(s)) ||
+                    (t.Customer != null && t.Customer.FullName.ToLower().Contains(s)) ||
+                    (t.InvoiceNumber != null && t.InvoiceNumber.ToLower().Contains(s)) ||
+                    (t.Vehicle != null && (t.Vehicle.PlateNumber.ToLower().Contains(s) || t.Vehicle.Brand.ToLower().Contains(s))));
+            }
+
+            return q.OrderByDescending(t => t.TransactionDateTime).ToList();
+        }
+    }
+
+    private decimal FilteredReceiptsSum => FilteredTransactions
+        .Where(t => t.Type == TransactionType.Receipt)
+        .Sum(t => t.Amount);
+
+    private decimal FilteredPaymentsSum => FilteredTransactions
+        .Where(t => t.Type == TransactionType.Payment)
+        .Sum(t => t.Amount);
+
+    private decimal FilteredNetSum => FilteredReceiptsSum - FilteredPaymentsSum;
+
+    // Quick Debt Collection
+    private void CollectCustomerDebt(Customer c)
+    {
+        _receiptTitle = $"سداد دين مستحق بذمة العميل {c.FullName}";
+        _receiptAmount = c.TotalDebts;
+        _receiptCategory = TransactionCategory.DebtPayment;
+        _receiptMethod = PaymentMode.ImmediateCash;
+        _receiptCustomerIdString = c.Id.ToString();
+        _receiptPayerName = c.FullName;
+        _receiptVehicleIdString = "";
+        _receiptReferenceNumber = "";
+        _receiptNotes = $"سداد جزئي أو كامل للدين البالغ {c.TotalDebts:N0} ₪";
+        _receiptError = null;
+        _showReceiptModal = true;
+    }
+
+    private void OpenAddCashReceiptModal()
+    {
+        OpenAddReceiptModal();
+        _receiptMethod = PaymentMode.ImmediateCash;
+    }
+
+    private void OpenAddCashExpenseModal()
+    {
+        OpenAddExpenseModal();
+        _expenseMethod = PaymentMode.ImmediateCash;
+    }
+
+    private void OpenAddExpenseModal()
+    {
+        _expenseTitle = "";
+        _expenseAmount = 0;
+        _expenseCategory = TransactionCategory.CarWash;
+        _expenseMethod = PaymentMode.ImmediateCash;
+        _expenseVehicleIdString = "";
+        _expensePayee = "";
+        _expenseInvoiceNumber = "";
+        _expenseNotes = "";
+        _expenseError = null;
+        _showExpenseModal = true;
+    }
+
+    private async Task SaveGeneralExpense()
+    {
+        if (string.IsNullOrWhiteSpace(_expenseTitle))
+        {
+            _expenseError = "يرجى تحديد عنوان أو بند المصروف!";
+            return;
+        }
+        if (_expenseAmount <= 0)
+        {
+            _expenseError = "يرجى إدخال مبلغ مصروف صحيح أكبر من صفر!";
+            return;
+        }
+
+        try
+        {
+            Guid? vehicleId = null;
+            if (Guid.TryParse(_expenseVehicleIdString, out var vid))
+            {
+                vehicleId = vid;
+            }
+
+            var desc = _expenseTitle + (!string.IsNullOrWhiteSpace(_expenseNotes) ? $" - {_expenseNotes}" : "");
+            var tx = await RentalService.AddGeneralExpenseAsync(
+                _expenseAmount, 
+                desc, 
+                _expenseCategory, 
+                _expenseMethod, 
+                AuthState.CurrentUser.FullName,
+                vehicleId,
+                string.IsNullOrWhiteSpace(_expensePayee) ? null : _expensePayee.Trim(),
+                string.IsNullOrWhiteSpace(_expenseInvoiceNumber) ? null : _expenseInvoiceNumber.Trim());
+
+            _showExpenseModal = false;
+            await LoadAccountingData();
+            _printVoucherTransaction = tx;
+        }
+        catch (Exception ex)
+        {
+            _expenseError = ex.Message;
+        }
+    }
+
+    private void OpenAddReceiptModal()
+    {
+        _receiptTitle = "قبض دفعة نقدية معتمدة";
+        _receiptAmount = 0;
+        _receiptCategory = TransactionCategory.RentalPayment;
+        _receiptMethod = PaymentMode.ImmediateCash;
+        _receiptCustomerIdString = "";
+        _receiptPayerName = "";
+        _receiptVehicleIdString = "";
+        _receiptReferenceNumber = "";
+        _receiptNotes = "";
+        _receiptError = null;
+        _showReceiptModal = true;
+    }
+
+    private void OnReceiptCustomerChanged()
+    {
+        if (Guid.TryParse(_receiptCustomerIdString, out var custId))
+        {
+            var cust = _customers?.FirstOrDefault(c => c.Id == custId);
+            if (cust != null && string.IsNullOrWhiteSpace(_receiptPayerName))
+            {
+                _receiptPayerName = cust.FullName;
+            }
+
+            if (string.IsNullOrEmpty(_receiptVehicleIdString))
+            {
+                var relatedContract = _contracts?
+                    .Where(c => c.CustomerId == custId && c.Status != ContractStatus.Cancelled)
+                    .OrderByDescending(c => c.Status == ContractStatus.Active)
+                    .ThenByDescending(c => c.CreatedAt)
+                    .FirstOrDefault();
+
+                if (relatedContract != null && relatedContract.VehicleId != Guid.Empty)
+                {
+                    _receiptVehicleIdString = relatedContract.VehicleId.ToString();
+                }
+            }
+        }
+    }
+
+    private async Task SaveReceiptVoucher()
+    {
+        if (_receiptAmount <= 0)
+        {
+            _receiptError = "يرجى إدخال مبلغ مقبوض صحيح أكبر من صفر!";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_receiptTitle))
+        {
+            _receiptError = "يرجى تحديد عنوان وبند سند القبض!";
+            return;
+        }
+
+        try
+        {
+            Guid? customerId = null;
+            if (Guid.TryParse(_receiptCustomerIdString, out var cid))
+            {
+                customerId = cid;
+            }
+
+            Guid? vehicleId = null;
+            if (Guid.TryParse(_receiptVehicleIdString, out var vid))
+            {
+                vehicleId = vid;
+            }
+            else if (customerId.HasValue)
+            {
+                var relatedContract = _contracts?
+                    .Where(c => c.CustomerId == customerId.Value && c.Status != ContractStatus.Cancelled)
+                    .OrderByDescending(c => c.Status == ContractStatus.Active)
+                    .ThenByDescending(c => c.CreatedAt)
+                    .FirstOrDefault();
+
+                if (relatedContract != null && relatedContract.VehicleId != Guid.Empty)
+                {
+                    vehicleId = relatedContract.VehicleId;
+                }
+            }
+
+            var staff = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.FullName)
+                ? AuthState.CurrentUser.FullName
+                : (AuthState.CurrentUser.Username ?? "المحاسب");
+
+            FinancialTransaction tx;
+
+            if (_receiptCategory == TransactionCategory.DebtPayment && customerId.HasValue)
+            {
+                var debtNotes = _receiptTitle + (!string.IsNullOrWhiteSpace(_receiptNotes) ? $" - {_receiptNotes}" : "");
+                tx = await RentalService.SettleCustomerDebtAsync(customerId.Value, _receiptAmount, _receiptMethod, debtNotes, staff);
+            }
+            else
+            {
+                var desc = _receiptTitle + (!string.IsNullOrWhiteSpace(_receiptNotes) ? $" - {_receiptNotes}" : "");
+                var payer = !string.IsNullOrWhiteSpace(_receiptPayerName)
+                    ? _receiptPayerName.Trim()
+                    : (_customers?.FirstOrDefault(c => c.Id == customerId)?.FullName ?? "العميل");
+
+                tx = new FinancialTransaction
+                {
+                    Type = TransactionType.Receipt,
+                    Category = _receiptCategory,
+                    Amount = _receiptAmount,
+                    PaymentMethod = _receiptMethod,
+                    TransactionDateTime = DateTime.Now,
+                    StaffUsername = staff,
+                    CustomerId = customerId,
+                    VehicleId = vehicleId,
+                    PayeeOrVendor = payer,
+                    InvoiceNumber = string.IsNullOrWhiteSpace(_receiptReferenceNumber) ? null : _receiptReferenceNumber.Trim(),
+                    Description = desc
+                };
+
+                tx = await RentalService.AddTransactionAsync(tx);
+            }
+
+            _showReceiptModal = false;
+            await LoadAccountingData();
+            _printVoucherTransaction = tx;
+        }
+        catch (Exception ex)
+        {
+            _receiptError = ex.Message;
+        }
+    }
+
+    private void OpenCloseShiftModal()
+    {
+        if (_currentShift != null)
+        {
+            _actualCashClose = _currentShift.OpeningBalance + _currentShift.SystemCalculatedCash;
+            _closeNotes = "";
+            _showCloseShiftModal = true;
+        }
+    }
+
+    private async Task ConfirmOpenShift()
+    {
+        await RentalService.OpenShiftAsync(AuthState.CurrentUser.Username, AuthState.CurrentUser.FullName, _newShiftOpeningBalance);
+        _showOpenShiftModal = false;
+        await LoadAccountingData();
+    }
+
+    private async Task ConfirmCloseShift()
+    {
+        if (_currentShift != null)
+        {
+            await RentalService.CloseShiftAsync(_currentShift.Id, _actualCashClose, _closeNotes);
+            _showCloseShiftModal = false;
+            await LoadAccountingData();
+        }
+    }
+
+    private void OpenVehicleProfileById(Guid vehicleId)
+    {
+        var v = _vehicles?.FirstOrDefault(veh => veh.Id == vehicleId);
+        if (v != null)
+        {
+            _selectedVehicleForDossier = v;
+        }
+    }
+
+    private async Task PrintReport()
+    {
+        await JSRuntime.InvokeVoidAsync("window.print");
+    }
+
+    private string GetCategoryLabel(TransactionCategory cat)
+    {
+        return cat switch
+        {
+            TransactionCategory.RentalPayment => "إيجار مركبة",
+            TransactionCategory.ContractExtension => "تمديد عقد إيجار",
+            TransactionCategory.CarMaintenance => "صيانة وتصليح",
+            TransactionCategory.CarWash => "غسيل وتنظيف",
+            TransactionCategory.CarInsurance => "تأمين مركبة",
+            TransactionCategory.CarLicensing => "ترخيص وديناموميتر",
+            TransactionCategory.SpareParts => "قطع غيار",
+            TransactionCategory.Fuel => "وقود ومحروقات",
+            TransactionCategory.TrafficViolation => "مخالفة مرورية",
+            TransactionCategory.DebtPayment => "سداد ديون عملاء",
+            TransactionCategory.GeneralOfficeExpense => "مصاريف عامة وإدارية",
+            TransactionCategory.OfficeExpense => "مستلزمات وضيافة",
+            _ => "أخرى"
+        };
+    }
+
+    private string GetPaymentModeLabel(PaymentMode mode)
+    {
+        return mode switch
+        {
+            PaymentMode.ImmediateCash => "نقدي (كاش)",
+            PaymentMode.CreditCard => "فيزا / بطاقة",
+            PaymentMode.BankTransfer => "حوالة بنكية",
+            _ => "نقدي"
+        };
+    }
+
+    private void ExportAccountingToExcel()
+    {
+        if (_transactions == null || !_transactions.Any()) return;
+
+        var headers = new[]
+        {
+            "رقم السند", "نوع السند", "التاريخ والوقت", "المبلغ", "طريقة الدفع",
+            "الطرف / العميل", "البيان / الوصف", "رقم الفاتورة الخارجي", "السيارة", "الموظف المنفذ"
+        };
+
+        var rows = _transactions.Select(t => new object?[]
+        {
+            t.ReceiptNumber,
+            t.Type == TransactionType.Receipt ? "قبض مالي" : "صرف مالي",
+            t.TransactionDateTime.ToString("yyyy/MM/dd HH:mm"),
+            t.Amount,
+            t.PaymentMethod switch {
+                PaymentMode.ImmediateCash => "نقداً",
+                PaymentMode.BankTransfer => "تحويل بنكي",
+                PaymentMode.CreditCard => "بطاقة فيزا",
+                _ => "آجل"
+            },
+            t.Customer?.FullName ?? t.PayeeOrVendor ?? "",
+            t.Description,
+            t.InvoiceNumber ?? "",
+            t.Vehicle != null ? $"{t.Vehicle.Brand} {t.Vehicle.Model} ({t.Vehicle.PlateNumber})" : "",
+            t.StaffUsername
+        });
+
+        ExportHelper.ExportToCsv($"Treasury_Report_{DateTime.Now:yyyyMMdd_HHmm}.csv", headers, rows);
+    }
+}

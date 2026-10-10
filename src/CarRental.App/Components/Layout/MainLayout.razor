@@ -1,0 +1,77 @@
+@inherits LayoutComponentBase
+@inject IAuthStateService AuthState
+@inject IRentalSystemService RentalService
+@implements IDisposable
+
+@if (!AuthState.IsAuthenticated)
+{
+    <LoginScreen />
+}
+else if (_needsShiftPrompt)
+{
+    <OpenShiftModal OnShiftOpened="HandleShiftOpened" />
+}
+else
+{
+    <div class="app-container">
+        <!-- Main Workspace (Full Width) -->
+        <div class="main-wrapper">
+            <!-- Top Header Bar -->
+            <TopHeader />
+
+            <!-- Dynamic Body Content -->
+            <main class="page-content">
+                @Body
+            </main>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _needsShiftPrompt = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthState.OnUserChanged += HandleUserChanged;
+        await CheckShiftStatusAsync();
+    }
+
+    private async void HandleUserChanged()
+    {
+        await CheckShiftStatusAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CheckShiftStatusAsync()
+    {
+        if (AuthState.IsAuthenticated)
+        {
+            try
+            {
+                var username = AuthState.CurrentUser?.Username ?? "admin";
+                var shift = await RentalService.GetCurrentShiftAsync(username);
+                _needsShiftPrompt = (shift == null);
+            }
+            catch
+            {
+                _needsShiftPrompt = false;
+            }
+        }
+        else
+        {
+            _needsShiftPrompt = false;
+        }
+    }
+
+    private async Task HandleShiftOpened()
+    {
+        _needsShiftPrompt = false;
+        await CheckShiftStatusAsync();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        AuthState.OnUserChanged -= HandleUserChanged;
+    }
+}

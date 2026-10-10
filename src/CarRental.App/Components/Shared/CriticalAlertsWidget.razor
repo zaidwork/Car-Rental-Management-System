@@ -1,0 +1,44 @@
+@inject NavigationManager Navigation
+
+<div class="widget-card">
+    <div class="widget-header">
+        <span class="widget-title">تنبيهات حرجة</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary-blue)" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+    </div>
+
+    <div class="alerts-list">
+        @if (Alerts != null && Alerts.Any())
+        {
+            @foreach (var alert in Alerts)
+            {
+                <div class="alert-item-card @alert.Severity" style="cursor: pointer;" @onclick='() => Navigation.NavigateTo("fleet")'>
+                    <div class="alert-num-badge">@alert.Id</div>
+                    <div class="alert-texts">
+                        <span class="alert-text-title">@alert.Title</span>
+                        <span class="alert-text-sub">@alert.Subtitle</span>
+                    </div>
+                    <div class="alert-icon-tail">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="m9 18 6-6-6-6"/>
+                        </svg>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div style="padding: 18px 12px; text-align: center; color: var(--accent-green); background: var(--accent-green-bg); border-radius: 8px; border: 1px solid var(--accent-green-border); font-size: 0.88rem; font-weight: 700;">
+                ✓ لا توجد أي تنبيهات حرجة حالياً. كافة المركبات والتراخيص بحالة سليمة ومحدثة.
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<CriticalAlertDto>? Alerts { get; set; }
+}

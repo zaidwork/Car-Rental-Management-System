@@ -1,0 +1,151 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Interfaces
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+
+@if (Customer != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 540px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path>
+                        <path d="M12 18V6"></path>
+                    </svg>
+                    <span>قبض دفعة من ديون العميل (@Customer.FullName)</span>
+                </div>
+                <button class="btn-close-modal" @onclick="OnClose">×</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Debt Summary Card -->
+                <div style="background: #fef2f2; border: 1.5px solid #fca5a5; border-radius: 8px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #991b1b; font-weight: 700;">إجمالي الديون المستحقة حالياً:</span>
+                    <span style="font-size: 1.3rem; font-weight: 900; color: #dc2626;">@Customer.TotalDebts.ToString("N0") ₪</span>
+                </div>
+
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <label class="form-label" style="margin: 0; font-weight: 700;">المبلغ المسدد الآن (₪):</label>
+                        @if (Customer.TotalDebts > 0)
+                        {
+                            <button type="button" class="tool-btn-pill" style="font-size: 0.76rem; padding: 2px 8px;" @onclick="() => _amount = Customer.TotalDebts">
+                                ⚡ كامل الدين (@Customer.TotalDebts.ToString("N0") ₪)
+                            </button>
+                        }
+                    </div>
+                    <input type="number" class="form-control" @bind="_amount" min="1" style="font-size: 1.15rem; font-weight: 900; color: #15803d;" placeholder="أدخل المبلغ..." />
+                    <span style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; display: block;">
+                        المتبقي التقديري بعد السداد: <strong style="color: var(--primary-blue);">@Math.Max(0, Customer.TotalDebts - _amount).ToString("N0") ₪</strong>
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">طريقة السداد:</label>
+                    <select class="form-control" @bind="_mode">
+                        <option value="@PaymentMode.ImmediateCash">نقداً بالصندوق (Cash)</option>
+                        <option value="@PaymentMode.BankTransfer">تحويل بنكي</option>
+                        <option value="@PaymentMode.CreditCard">بطاقة ائتمان / فيزا</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">ملاحظات أو بيان السند:</label>
+                    <input type="text" class="form-control" placeholder="e.g. دفعة تصفية حساب أو تسوية ودية..." @bind="_notes" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div style="background: #fee2e2; color: #dc2626; border: 1.5px solid #ef4444; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 0.88rem;">
+                        ⚠️ @_errorMessage
+                    </div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button class="filter-pill" @onclick="OnClose">إلغاء</button>
+                <button class="btn-primary-action" style="background: var(--accent-green); border-color: var(--accent-green);" @onclick="ConfirmPayment" disabled="@_isSubmitting">
+                    <span>@(_isSubmitting ? "جاري الحفظ والترحيل..." : "تأكيد القبض وإصدار سند قبض")</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_savedTransaction != null)
+{
+    <PrintVoucherModal Transaction="@_savedTransaction" OnClose="OnVoucherPrinted" />
+}
+
+@code {
+    [Parameter] public Customer? Customer { get; set; }
+    [Parameter] public EventCallback OnPaid { get; set; }
+    [Parameter] public EventCallback<FinancialTransaction> OnDebtPaid { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private decimal _amount;
+    private PaymentMode _mode = PaymentMode.ImmediateCash;
+    private string? _notes;
+    private bool _isSubmitting = false;
+    private string? _errorMessage;
+    private FinancialTransaction? _savedTransaction;
+
+    protected override void OnInitialized()
+    {
+        if (Customer != null)
+        {
+            _amount = Customer.TotalDebts;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Customer != null && _amount == 0)
+        {
+            _amount = Customer.TotalDebts;
+        }
+    }
+
+    private async Task ConfirmPayment()
+    {
+        if (Customer == null) return;
+        _errorMessage = null;
+        if (_amount <= 0)
+        {
+            _errorMessage = "يرجى إدخال مبلغ صحيح أكبر من الصفر!";
+            return;
+        }
+
+        try
+        {
+            _isSubmitting = true;
+            var staff = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username) 
+                ? AuthState.CurrentUser.Username 
+                : AuthState.CurrentUser.FullName;
+
+            _savedTransaction = await RentalService.SettleCustomerDebtAsync(Customer.Id, _amount, _mode, _notes ?? "", staff);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.InnerException?.Message ?? ex.Message;
+            _isSubmitting = false;
+        }
+    }
+
+    private async Task OnVoucherPrinted()
+    {
+        var tx = _savedTransaction;
+        _savedTransaction = null;
+        if (OnDebtPaid.HasDelegate && tx != null)
+        {
+            await OnDebtPaid.InvokeAsync(tx);
+        }
+        if (OnPaid.HasDelegate)
+        {
+            await OnPaid.InvokeAsync();
+        }
+    }
+}

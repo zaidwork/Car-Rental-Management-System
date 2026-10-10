@@ -1,0 +1,329 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Interfaces
+@inject NavigationManager Navigation
+@inject IRentalSystemService RentalService
+
+<div class="widget-card gauges-widget-container">
+    <!-- Header with Live Pulse Indicator -->
+    <div class="widget-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="widget-title">حالة الأسطول</span>
+            <span class="live-pulse-badge" title="بيانات حية ومباشرة من واقع قاعدة بيانات الأسطول">
+                <span class="pulse-dot"></span>
+                مباشر
+            </span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <button class="icon-btn-subtle" title="تحديث المؤشرات فورياً" @onclick="RefreshDataAsync" style="width: 24px; height: 24px;">
+                <svg class="@(_isRefreshing ? "spin-icon" : "")" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--primary-blue)" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+            </button>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+        </div>
+    </div>
+
+    <!-- 3 Speedometer Circular Gauges -->
+    <div class="gauges-row">
+        <!-- Gauge 1: مؤشر الجاهزية (Blue/Purple Dial) -->
+        <div class="gauge-card-interactive" @onclick='() => Navigation.NavigateTo("fleet")' title="انقر لعرض السيارات الجاهزة في الأسطول">
+            <div class="gauge-svg-wrapper">
+                <svg width="82" height="52" viewBox="0 0 100 56">
+                    <!-- Background Arc -->
+                    <path d="M 14 52 A 36 36 0 0 1 86 52" fill="none" stroke="#ded4bf" stroke-width="8" stroke-linecap="round"/>
+                    <!-- Dynamic Colored Arc -->
+                    <path d="M 14 52 A 36 36 0 0 1 86 52" fill="none" stroke="url(#purpleGrad)" stroke-width="8" stroke-linecap="round"
+                          stroke-dasharray="113.1"
+                          stroke-dashoffset="@ReadinessDashOffset"
+                          style="transition: stroke-dashoffset 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);" />
+                    <!-- Needle -->
+                    <g transform="rotate(@ReadinessAngle 50 52)" style="transition: transform 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                        <line x1="50" y1="52" x2="50" y2="20" stroke="#f8fafc" stroke-width="2.8" stroke-linecap="round"/>
+                        <circle cx="50" cy="52" r="4" fill="#8b5cf6"/>
+                    </g>
+                    <defs>
+                        <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#38bdf8"/>
+                            <stop offset="100%" stop-color="#8b5cf6"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <div class="gauge-value-number" style="color: #7c3aed;">
+                @ReadinessPercent%
+            </div>
+            <span class="gauge-label">مؤشر الجاهزية</span>
+            <span class="gauge-subdetail">@ReadyCarsCount من @TotalCars جاهزة</span>
+        </div>
+
+        <!-- Gauge 2: معدل الحجز (Cyan/Green Dial) -->
+        <div class="gauge-card-interactive" @onclick='() => Navigation.NavigateTo("contracts")' title="انقر لعرض العقود والسيارات المؤجرة">
+            <div class="gauge-svg-wrapper">
+                <svg width="82" height="52" viewBox="0 0 100 56">
+                    <!-- Background Arc -->
+                    <path d="M 14 52 A 36 36 0 0 1 86 52" fill="none" stroke="#ded4bf" stroke-width="8" stroke-linecap="round"/>
+                    <!-- Dynamic Colored Arc -->
+                    <path d="M 14 52 A 36 36 0 0 1 86 52" fill="none" stroke="url(#cyanBlueGrad)" stroke-width="8" stroke-linecap="round"
+                          stroke-dasharray="113.1"
+                          stroke-dashoffset="@BookingDashOffset"
+                          style="transition: stroke-dashoffset 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);" />
+                    <!-- Needle -->
+                    <g transform="rotate(@BookingAngle 50 52)" style="transition: transform 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                        <line x1="50" y1="52" x2="50" y2="20" stroke="#f8fafc" stroke-width="2.8" stroke-linecap="round"/>
+                        <circle cx="50" cy="52" r="4" fill="#0ea5e9"/>
+                    </g>
+                    <defs>
+                        <linearGradient id="cyanBlueGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#38bdf8"/>
+                            <stop offset="100%" stop-color="#10b981"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <div class="gauge-value-number" style="color: #0284c7;">
+                @BookingPercent%
+            </div>
+            <span class="gauge-label">معدل الحجز</span>
+            <span class="gauge-subdetail">@RentedCarsCount من @TotalCars مؤجرة</span>
+        </div>
+
+        <!-- Gauge 3: سلامة الأسطول (Speedometer Green/Orange/Red) -->
+        <div class="gauge-card-interactive" @onclick='() => Navigation.NavigateTo("fleet")' title="انقر لمراجعة صيانة وفحص الأسطول">
+            <div class="gauge-svg-wrapper">
+                <svg width="82" height="52" viewBox="0 0 100 56">
+                    <!-- Background Arc -->
+                    <path d="M 14 52 A 36 36 0 0 1 86 52" fill="none" stroke="#ded4bf" stroke-width="8" stroke-linecap="round"/>
+                    <!-- Dynamic Colored Arc -->
+                    <path d="M 14 52 A 36 36 0 0 1 86 52" fill="none" stroke="url(#orangeGreenGrad)" stroke-width="8" stroke-linecap="round"
+                          stroke-dasharray="113.1"
+                          stroke-dashoffset="@MaintenanceDashOffset"
+                          style="transition: stroke-dashoffset 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);" />
+                    <!-- Needle -->
+                    <g transform="rotate(@MaintenanceAngle 50 52)" style="transition: transform 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                        <line x1="50" y1="52" x2="50" y2="20" stroke="#f8fafc" stroke-width="2.8" stroke-linecap="round"/>
+                        <circle cx="50" cy="52" r="4" fill="@(MaintenancePercent >= 80 ? "#10b981" : (MaintenancePercent >= 50 ? "#f59e0b" : "#ef4444"))"/>
+                    </g>
+                    <defs>
+                        <linearGradient id="orangeGreenGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#ef4444"/>
+                            <stop offset="50%" stop-color="#f59e0b"/>
+                            <stop offset="100%" stop-color="#10b981"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <div class="gauge-value-number" style="color: @(MaintenancePercent >= 80 ? "#16a34a" : (MaintenancePercent >= 50 ? "#d97706" : "#dc2626"));">
+                @MaintenancePercent%
+            </div>
+            <span class="gauge-label">سلامة الأسطول</span>
+            <span class="gauge-subdetail" style="color: @(NeedingServiceCount > 0 ? "#dc2626" : "var(--text-muted)");">
+                @(NeedingServiceCount > 0 ? $"{NeedingServiceCount} سيارات بحاجة خدمة" : "الأسطول سليم 100%")
+            </span>
+        </div>
+    </div>
+
+    <!-- Glowing Waves Underneath With Smooth Sine Waves Flowing -->
+    <div class="wave-graph-strip">
+        <svg width="100%" height="34" viewBox="0 0 300 36" preserveAspectRatio="none">
+            <!-- Dynamic Green Wave Left -->
+            <path class="animated-wave-line wave-left" 
+                  d="M 0 22 Q 40 @(22 - (ReadinessPercent / 7)), 80 22 T 160 22" 
+                  fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round"/>
+            
+            <!-- Dynamic Cyan Wave Right -->
+            <path class="animated-wave-line wave-right" 
+                  d="M 145 22 Q 185 @(22 - (BookingPercent / 7)), 225 22 T 300 20" 
+                  fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+    </div>
+</div>
+
+<style>
+    .gauges-widget-container {
+        position: relative;
+        overflow: hidden;
+        background: var(--bg-card);
+        border: 1.5px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 16px 18px 10px 18px;
+    }
+
+    .live-pulse-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        color: #065f46;
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+
+    .pulse-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #10b981;
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+        animation: pulse-ring 1.8s infinite;
+    }
+
+    @@keyframes pulse-ring {
+        0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+        70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    .spin-icon {
+        animation: spin 0.8s linear infinite;
+    }
+
+    @@keyframes spin {
+        100% { transform: rotate(360deg); }
+    }
+
+    .gauges-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 4px 0 2px 0;
+    }
+
+    .gauge-card-interactive {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: 6px 4px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .gauge-card-interactive:hover {
+        transform: translateY(-2px);
+        background: rgba(0, 0, 0, 0.03);
+    }
+
+    .gauge-svg-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+    }
+
+    .gauge-value-number {
+        font-size: 1.05rem;
+        font-weight: 900;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+        letter-spacing: -0.5px;
+        line-height: 1.15;
+        margin-top: 2px;
+    }
+
+    .gauge-label {
+        font-size: 0.78rem;
+        font-weight: 800;
+        color: var(--text-main);
+        text-align: center;
+        white-space: nowrap;
+        line-height: 1.2;
+    }
+
+    .gauge-subdetail {
+        font-size: 0.68rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-align: center;
+        white-space: nowrap;
+        line-height: 1.2;
+    }
+
+    .wave-graph-strip {
+        height: 34px;
+        width: 100%;
+        margin-top: 4px;
+    }
+
+    .animated-wave-line {
+        filter: drop-shadow(0 2px 4px rgba(16, 185, 129, 0.2));
+        animation: wavePulse 3s ease-in-out infinite alternate;
+    }
+
+    @@keyframes wavePulse {
+        0% { stroke-width: 2.2; opacity: 0.85; }
+        100% { stroke-width: 3.2; opacity: 1; filter: drop-shadow(0 3px 6px rgba(56, 189, 248, 0.4)); }
+    }
+</style>
+
+@code {
+    [Parameter] public DashboardSummaryDto? DashboardData { get; set; }
+
+    private DashboardSummaryDto? _localData;
+    private bool _isRefreshing = false;
+
+    private DashboardSummaryDto? EffectiveData => DashboardData ?? _localData;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (DashboardData == null)
+        {
+            await RefreshDataAsync();
+        }
+    }
+
+    public async Task RefreshDataAsync()
+    {
+        try
+        {
+            _isRefreshing = true;
+            _localData = await RentalService.GetDashboardDataAsync();
+        }
+        catch { }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    private int TotalCars => EffectiveData?.TotalVehicles ?? EffectiveData?.AllVehicles.Count ?? 0;
+
+    private int ReadyCarsCount => EffectiveData?.AllVehicles.Count(v => 
+        v.Status == VehicleStatus.Available && 
+        v.DaysUntilLicenseExpiry > 0 && 
+        !v.IsBlockedByCriticalMaintenance) ?? EffectiveData?.AvailableVehicles ?? 0;
+
+    private int RentedCarsCount => EffectiveData?.RentedVehicles ?? 0;
+
+    private int HealthyCarsCount => EffectiveData?.AllVehicles.Count(v => 
+        !v.IsBlockedByCriticalMaintenance && 
+        !v.IsMaintenanceOverdue && 
+        v.Status != VehicleStatus.InMaintenance) ?? TotalCars;
+
+    private int NeedingServiceCount => Math.Max(0, TotalCars - HealthyCarsCount);
+
+    // Percentages (0 to 100)
+    private int ReadinessPercent => TotalCars > 0 ? (int)Math.Clamp(Math.Round((double)ReadyCarsCount / TotalCars * 100), 0, 100) : 0;
+    private int BookingPercent => TotalCars > 0 ? (int)Math.Clamp(Math.Round((double)RentedCarsCount / TotalCars * 100), 0, 100) : 0;
+    private int MaintenancePercent => TotalCars > 0 ? (int)Math.Clamp(Math.Round((double)HealthyCarsCount / TotalCars * 100), 0, 100) : 100;
+
+    // Needle Rotation Angles (-90deg at 0% to +90deg at 100%)
+    private double ReadinessAngle => -90.0 + ((ReadinessPercent / 100.0) * 180.0);
+    private double BookingAngle => -90.0 + ((BookingPercent / 100.0) * 180.0);
+    private double MaintenanceAngle => -90.0 + ((MaintenancePercent / 100.0) * 180.0);
+
+    // Arc Dash Offsets (Total semicircle arc = 113.1 for R = 36)
+    private string ReadinessDashOffset => (113.1 * (1.0 - (ReadinessPercent / 100.0))).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+    private string BookingDashOffset => (113.1 * (1.0 - (BookingPercent / 100.0))).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+    private string MaintenanceDashOffset => (113.1 * (1.0 - (MaintenancePercent / 100.0))).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+}

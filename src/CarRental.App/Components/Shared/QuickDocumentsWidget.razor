@@ -1,0 +1,345 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Interfaces
+@inject IRentalSystemService RentalService
+@implements IDisposable
+
+<div class="widget-card">
+    <div class="widget-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+            <span class="widget-title">إدارة الزبائن والمستندات</span>
+        </div>
+        <button type="button" class="btn-refresh-mini" @onclick="RefreshAsync" title="تحديث العقود النشطة فورياً" disabled="@_isRefreshing">
+            <svg class="@(_isRefreshing ? "spin-icon" : "")" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+        </button>
+    </div>
+
+    <p style="font-size: 0.76rem; color: #94a3b8; line-height: 1.4; margin: 0 0 6px 0;">
+        طباعة العقود والكمبيالات ومحاضر الفحص بنقرة سريعة لأي عقد نشط
+    </p>
+
+    @if (_customerGroups != null && _customerGroups.Any())
+    {
+        <!-- 1. اختيار المستأجر (الزبون) - اسم واحد لكل مستأجر دون أي تكرار -->
+        <div style="margin-bottom: 8px;">
+            <label style="font-size: 0.74rem; font-weight: 800; color: #475569; margin-bottom: 3px; display: flex; align-items: center; justify-content: space-between;">
+                <span style="display: flex; align-items: center; gap: 4px;">
+                    <span>👤</span>
+                    <span>المستأجر (الزبون):</span>
+                </span>
+                <span style="font-size: 0.68rem; color: #0284c7; background: #e0f2fe; padding: 1px 6px; border-radius: 8px; font-weight: 800;">
+                    @_customerGroups.Count عملاء نشطين
+                </span>
+            </label>
+            <select class="form-control customer-select-box" value="@_selectedCustomerId" @onchange="OnCustomerSelected">
+                @foreach (var g in _customerGroups)
+                {
+                    <option value="@g.CustomerId">
+                        @g.CustomerName @(g.Contracts.Count > 1 ? $"({g.Contracts.Count} سيارات مستأجرة 🚗)" : "")
+                    </option>
+                }
+            </select>
+        </div>
+
+        <!-- 2. اختيار السيارة / العقد لنفس المستأجر المحدد -->
+        <div style="margin-bottom: 8px;">
+            <label style="font-size: 0.74rem; font-weight: 800; color: #475569; margin-bottom: 3px; display: flex; align-items: center; justify-content: space-between;">
+                <span style="display: flex; align-items: center; gap: 4px;">
+                    <span>🚗</span>
+                    <span>السيارة المستأجرة / العقد:</span>
+                </span>
+                @if (CurrentCustomerContracts.Count > 1)
+                {
+                    <span style="font-size: 0.68rem; color: #b45309; background: #fef3c7; padding: 1px 6px; border-radius: 8px; font-weight: 900; border: 1px solid #fde68a;">
+                        اختر من بين @CurrentCustomerContracts.Count سيارات
+                    </span>
+                }
+            </label>
+            <select class="form-control vehicle-select-box" value="@_selectedContractId" @onchange="OnContractSelected">
+                @foreach (var c in CurrentCustomerContracts)
+                {
+                    <option value="@c.Id">
+                        @c.Vehicle?.Brand @c.Vehicle?.Model (@c.Vehicle?.PlateNumber) - عقد @c.ContractNumber
+                    </option>
+                }
+            </select>
+        </div>
+
+        <!-- 3. كارت ملخص العقد المحدد للتأكيد البصري -->
+        @if (SelectedContract != null)
+        {
+            <div class="contract-quick-preview">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+                    <span style="font-weight: 900; color: #1e293b; font-size: 0.78rem;">
+                        🚗 @SelectedContract.Vehicle?.Brand @SelectedContract.Vehicle?.Model
+                    </span>
+                    <span class="preview-badge-contract">
+                        @SelectedContract.ContractNumber
+                    </span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: #64748b; margin-top: 3px;">
+                    <span>⏱️ موعد الإرجاع:</span>
+                    <span style="font-weight: 700; color: #334155;">
+                        @(SelectedContract.IsOpenEnded ? "عقد مفتوح (حساب يومي)" : SelectedContract.ExpectedReturnDateTime.ToString("yyyy/MM/dd hh:mm tt"))
+                    </span>
+                </div>
+                @if (SelectedContract.RemainingAmount > 0)
+                {
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: #dc2626; font-weight: 800; margin-top: 2px;">
+                        <span>⚠️ ذمم مستحقة على العقد:</span>
+                        <span>@SelectedContract.RemainingAmount.ToString("N0") ₪</span>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- 4. أزرار الطباعة والمعاينة الفورية -->
+        <div class="doc-action-buttons">
+            <button class="btn-doc-quick" @onclick="() => OnQuickPrintDoc(true)" title="معاينة وطباعة العقد الرسمي فورياً">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                </svg>
+                <span>عقد الإيجار</span>
+            </button>
+
+            <button class="btn-doc-quick" @onclick="() => OnQuickPrintDoc(false)" title="معاينة وطباعة الكمبيالة الضامنة فورياً">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                    <line x1="2" y1="10" x2="22" y2="10"></line>
+                </svg>
+                <span>كمبيالة الضمان</span>
+            </button>
+        </div>
+    }
+    else
+    {
+        <div style="font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 6px; border: 1px dashed var(--border-color);">
+            <span>لا توجد عقود نشطة حالياً لطباعة وثائقها</span>
+        </div>
+    }
+</div>
+
+@if (_showModal && _selectedContract != null)
+{
+    <PrintDocumentModal Contract="@_selectedContract" InitialTabContract="@_isContractTab" OnClose="@(() => _showModal = false)" />
+}
+
+<style>
+    .btn-refresh-mini {
+        background: #f1f5f9;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 3px 6px;
+        color: #64748b;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+    }
+    .btn-refresh-mini:hover {
+        background: #e0f2fe;
+        color: #0284c7;
+        border-color: #7dd3fc;
+        transform: rotate(30deg);
+    }
+    .spin-icon {
+        animation: spin 0.8s linear infinite;
+    }
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    .customer-select-box {
+        font-size: 0.82rem !important;
+        padding: 6px 10px !important;
+        font-weight: 700 !important;
+        border-radius: 8px !important;
+        border: 1.5px solid #cbd5e1 !important;
+        color: #0f172a !important;
+        background: #ffffff !important;
+    }
+    .vehicle-select-box {
+        font-size: 0.80rem !important;
+        padding: 6px 10px !important;
+        font-weight: 700 !important;
+        border-radius: 8px !important;
+        border: 1.5px solid #93c5fd !important;
+        background: #f8fafc !important;
+        color: #0369a1 !important;
+    }
+    .contract-quick-preview {
+        background: #faf8f5;
+        border: 1.5px dashed #cbd5e1;
+        border-radius: 8px;
+        padding: 7px 10px;
+        margin-bottom: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+    .preview-badge-contract {
+        font-weight: 900;
+        font-size: 0.72rem;
+        color: #0284c7;
+        background: #e0f2fe;
+        padding: 2px 7px;
+        border-radius: 5px;
+        font-family: monospace;
+        letter-spacing: 0.5px;
+    }
+</style>
+
+@code {
+    [Parameter] public EventCallback<(Contract Contract, bool IsContractTab)> OnPrintRequested { get; set; }
+
+    public class CustomerActiveGroup
+    {
+        public Guid CustomerId { get; set; }
+        public string CustomerName { get; set; } = "";
+        public string NationalId { get; set; } = "";
+        public string Phone { get; set; } = "";
+        public List<Contract> Contracts { get; set; } = new();
+    }
+
+    private bool _showModal = false;
+    private bool _isContractTab = true;
+    private bool _isRefreshing = false;
+    private List<Contract> _activeContracts = new();
+    private List<CustomerActiveGroup> _customerGroups = new();
+
+    private Guid _selectedCustomerId = Guid.Empty;
+    private Guid _selectedContractId = Guid.Empty;
+    private Contract? _selectedContract;
+
+    private List<Contract> CurrentCustomerContracts => 
+        _customerGroups.FirstOrDefault(g => g.CustomerId == _selectedCustomerId)?.Contracts ?? new();
+
+    private Contract? SelectedContract => 
+        _activeContracts.FirstOrDefault(c => c.Id == _selectedContractId) 
+        ?? CurrentCustomerContracts.FirstOrDefault();
+
+    protected override async Task OnInitializedAsync()
+    {
+        RentalService.OnContractsDataChanged += HandleContractsDataChanged;
+        await LoadActiveContracts();
+    }
+
+    private async void HandleContractsDataChanged()
+    {
+        await InvokeAsync(RefreshAsync);
+    }
+
+    public async Task RefreshAsync()
+    {
+        _isRefreshing = true;
+        StateHasChanged();
+        try
+        {
+            await LoadActiveContracts();
+        }
+        finally
+        {
+            _isRefreshing = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadActiveContracts()
+    {
+        _activeContracts = await RentalService.GetContractsAsync(ContractStatus.Active);
+
+        // تجميع العقود حسب العميل (اسم واحد لكل مستأجر دون تكرار)
+        _customerGroups = _activeContracts
+            .GroupBy(c => c.CustomerId)
+            .Select(g => new CustomerActiveGroup
+            {
+                CustomerId = g.Key,
+                CustomerName = g.First().Customer?.FullName ?? "عميل غير محدد",
+                NationalId = g.First().Customer?.NationalIdOrPassport ?? "",
+                Phone = g.First().Customer?.PrimaryPhone ?? "",
+                Contracts = g.OrderByDescending(c => c.CreatedAt).ToList()
+            })
+            .OrderBy(g => g.CustomerName)
+            .ToList();
+
+        // الحفاظ على العميل المحدد أو اختيار أول عميل تلقائياً
+        if (!_customerGroups.Any(g => g.CustomerId == _selectedCustomerId))
+        {
+            _selectedCustomerId = _customerGroups.FirstOrDefault()?.CustomerId ?? Guid.Empty;
+        }
+
+        // الحفاظ على العقد المحدد للعميل أو اختيار أول سيارة تلقائياً
+        var activeGroup = _customerGroups.FirstOrDefault(g => g.CustomerId == _selectedCustomerId);
+        if (activeGroup != null && activeGroup.Contracts.Any())
+        {
+            if (!activeGroup.Contracts.Any(c => c.Id == _selectedContractId))
+            {
+                _selectedContractId = activeGroup.Contracts.First().Id;
+            }
+        }
+        else
+        {
+            _selectedContractId = Guid.Empty;
+        }
+    }
+
+    private void OnCustomerSelected(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var custId))
+        {
+            _selectedCustomerId = custId;
+            var group = _customerGroups.FirstOrDefault(g => g.CustomerId == _selectedCustomerId);
+            _selectedContractId = group?.Contracts.FirstOrDefault()?.Id ?? Guid.Empty;
+        }
+    }
+
+    private void OnContractSelected(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var contractId))
+        {
+            _selectedContractId = contractId;
+        }
+    }
+
+    private async Task OnQuickPrintDoc(bool isContract)
+    {
+        _isContractTab = isContract;
+        var targetContractId = _selectedContractId != Guid.Empty 
+            ? _selectedContractId 
+            : SelectedContract?.Id ?? Guid.Empty;
+
+        if (targetContractId != Guid.Empty)
+        {
+            _selectedContract = await RentalService.GetContractByIdAsync(targetContractId);
+            if (_selectedContract != null)
+            {
+                if (OnPrintRequested.HasDelegate)
+                {
+                    await OnPrintRequested.InvokeAsync((_selectedContract, _isContractTab));
+                }
+                else
+                {
+                    _showModal = true;
+                }
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        RentalService.OnContractsDataChanged -= HandleContractsDataChanged;
+    }
+}

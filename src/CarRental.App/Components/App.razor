@@ -1,0 +1,18 @@
+@using Microsoft.AspNetCore.Components.Routing
+@using CarRental.App.Components.Layout
+
+<Router AppAssembly="@typeof(CarRental.App.Components.App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <div style="padding: 40px; text-align: center; color: #94a3b8;">
+                <h2>الصفحة غير موجودة</h2>
+                <p>عذراً، الرابط المطلوب غير متاح.</p>
+                <a href="" style="color: #38bdf8; font-weight: bold; margin-top: 12px; display: inline-block;">العودة للرئيسية</a>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>

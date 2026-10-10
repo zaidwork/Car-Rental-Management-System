@@ -1,0 +1,936 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Interfaces
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<div class="login-wrapper" @onkeydown="HandleKeyDown" tabindex="0" @ref="_containerRef" @onclick="FocusInput" autofocus>
+    <input @ref="_hiddenInputRef" tabindex="-1" aria-hidden="true" style="position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; border: none; z-index: -1;" />
+    
+    <!-- Ambient luxury background glows -->
+    <div class="luxury-ambient-glow glow-top"></div>
+    <div class="luxury-ambient-glow glow-bottom-right"></div>
+    <div class="luxury-ambient-glow glow-bottom-left"></div>
+
+    <!-- Top Executive Header Bar (Live Clock & System Status) -->
+    <div class="login-top-bar">
+        <div class="system-status-pill">
+            <span class="status-pulse-dot"></span>
+            <span>TAJ SYSTEM • بوابة الدخول الآمن</span>
+        </div>
+        <div class="system-time-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>@_currentTimeString</span>
+            <span class="time-separator">•</span>
+            <span>@_currentDateString</span>
+        </div>
+    </div>
+
+    <!-- Main Executive Login Card -->
+    <div class="login-card">
+        <!-- Top polished wood & gold veneer inlay -->
+        <div class="card-wood-inlay"></div>
+
+        <!-- Logo & Header -->
+        <div class="login-header">
+            <div class="login-logo-circle">
+                <img src="images/logo.png" alt="TAJ SYSTEM" class="login-logo-img" />
+            </div>
+            
+            <div class="header-text-group">
+                <h1 class="login-title" style="letter-spacing: 1.5px; font-weight: 900; font-size: 1.75rem;">TAJ SYSTEM</h1>
+                <div class="login-tagline">
+                    <span class="tagline-star">✦</span>
+                    <span>نظام التاج لإدارة وتأجير السيارات</span>
+                    <span class="tagline-star">✦</span>
+                </div>
+                <p class="login-instruction">أدخل الرمز السري للموظف (4 أرقام) للوصول للوحة التحكم</p>
+            </div>
+        </div>
+
+        <!-- 4-Digit PIN Indicators (Strictly RTL from Right to Left) -->
+        <div class="pin-section">
+            <div class="pin-display-wrapper @(_hasError ? "shake-error" : "")">
+                @for (int i = 0; i < 4; i++)
+                {
+                    var isFilled = _enteredPin.Length > i;
+                    var isCurrent = _enteredPin.Length == i;
+                    <div class="pin-slot @(isFilled ? "filled" : "") @(isCurrent ? "current-active" : "")">
+                        @if (isFilled)
+                        {
+                            if (_showPin)
+                            {
+                                <span class="pin-digit-text">@_enteredPin[i]</span>
+                            }
+                            else
+                            {
+                                <span class="pin-jewel-dot"></span>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- PIN Visibility Toggle -->
+            <button type="button" class="btn-toggle-pin" @onclick="TogglePinVisibility" title="@(_showPin ? "إخفاء الرمز" : "إظهار الرمز")" tabindex="-1">
+                @if (_showPin)
+                {
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                    </svg>
+                    <span>إخفاء الرمز</span>
+                }
+                else
+                {
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    <span>كشف الرمز</span>
+                }
+            </button>
+        </div>
+
+        <!-- Error / Status Message -->
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="login-error-badge">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>@_errorMessage</span>
+            </div>
+        }
+
+        <!-- Loading indicator during authentication -->
+        @if (_isAuthenticating)
+        {
+            <div class="auth-loading-badge">
+                <div class="auth-spinner"></div>
+                <span>جاري التحقق من الصلاحيات وفتح النظام...</span>
+            </div>
+        }
+
+        <!-- Numeric Keypad (Strict RTL: 1 on Right, 2 in Middle, 3 on Left) -->
+        <div class="keypad-container">
+            <div class="keypad-grid">
+                <!-- Row 1: 1 (Right) | 2 (Center) | 3 (Left) -->
+                <button type="button" tabindex="-1" class="keypad-btn" @onclick='() => AppendDigit("1")'>
+                    <span class="main-digit">1</span>
+                    <span class="sub-num">١</span>
+                </button>
+                <button type="button" tabindex="-1" class="keypad-btn" @onclick='() => AppendDigit("2")'>
+                    <span class="main-digit">2</span>
+                    <span class="sub-num">٢</span>
+                </button>
+                <button type="button" tabindex="-1" class="keypad-btn" @onclick='() => AppendDigit("3")'>
+                    <span class="main-digit">3</span>
+                    <span class="sub-num">٣</span>
+                </button>
+
+                <!-- Row 2: 4 (Right) | 5 (Center) | 6 (Left) -->
+                <button type="button" tabindex="-1" class="keypad-btn" @onclick='() => AppendDigit("4")'>
+                    <span class="main-digit">4</span>
+                    <span class="sub-num">٤</span>
+                </button>
+                <button type="button" tabindex="-1" class="keypad-btn" @onclick='() => AppendDigit("5")'>
+                    <span class="main-digit">5</span>
+                    <span class="sub-num">٥</span>
+                </button>
+                <button type="button" tabindex="-1" class="keypad-btn" @onclick='() => AppendDigit("6")'>
+                    <span class="main-digit">6</span>
+                    <span class="sub-num">٦</span>
+                </button>
+
+                <!-- Row 3: 7 (Right) | 8 (Center) | 9 (Left) -->
+                <button type="button" tabindex="-1" class="keypad-btn" @onclick='() => AppendDigit("7")'>
+                    <span class="main-digit">7</span>
+                    <span class="sub-num">٧</span>
+                </button>
+                <button type="button" tabindex="-1" class="keypad-btn" @onclick='() => AppendDigit("8")'>
+                    <span class="main-digit">8</span>
+                    <span class="sub-num">٨</span>
+                </button>
+                <button type="button" tabindex="-1" class="keypad-btn" @onclick='() => AppendDigit("9")'>
+                    <span class="main-digit">9</span>
+                    <span class="sub-num">٩</span>
+                </button>
+
+                <!-- Row 4: Clear (Right) | 0 (Center) | Backspace (Left) -->
+                <button type="button" tabindex="-1" class="keypad-btn keypad-func keypad-clear" @onclick="ClearPin" title="مسح الرمز كاملاً">
+                    <span class="main-digit">C</span>
+                    <span class="sub-num">مسح</span>
+                </button>
+                <button type="button" tabindex="-1" class="keypad-btn" @onclick='() => AppendDigit("0")'>
+                    <span class="main-digit">0</span>
+                    <span class="sub-num">٠</span>
+                </button>
+                <button type="button" tabindex="-1" class="keypad-btn keypad-func keypad-backspace" @onclick="BackspacePin" title="حذف آخر رقم">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 4h13l7 8-7 8H3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path>
+                        <line x1="12" y1="9" x2="6" y2="15"></line>
+                        <line x1="6" y1="9" x2="12" y2="15"></line>
+                    </svg>
+                    <span class="sub-num">تراجع</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Footer Instructions -->
+        <div class="login-footer-info">
+            <div class="footer-hint-badge">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                    <line x1="6" y1="8" x2="6.01" y2="8"></line>
+                    <line x1="10" y1="8" x2="10.01" y2="8"></line>
+                    <line x1="14" y1="8" x2="14.01" y2="8"></line>
+                    <line x1="18" y1="8" x2="18.01" y2="8"></line>
+                    <line x1="6" y1="12" x2="6.01" y2="12"></line>
+                    <line x1="18" y1="12" x2="18.01" y2="12"></line>
+                    <line x1="10" y1="16" x2="14" y2="16"></line>
+                </svg>
+                <span>يمكنك الإدخال عبر لوحة المفاتيح أو النقر على الأرقام مباشرة</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Executive Luxury Login Wrapper */
+    .login-wrapper {
+        min-height: 100vh;
+        width: 100vw;
+        background: radial-gradient(circle at 50% 12%, rgba(212, 175, 55, 0.16) 0%, transparent 45%),
+                    radial-gradient(circle at 10% 88%, rgba(2, 132, 199, 0.10) 0%, transparent 35%),
+                    radial-gradient(circle at 90% 88%, rgba(92, 48, 22, 0.08) 0%, transparent 40%),
+                    linear-gradient(135deg, #fdfbf7 0%, #f6f1e6 50%, #eee4d1 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 30px 20px;
+        direction: rtl;
+        font-family: var(--font-family);
+        outline: none;
+        position: relative;
+        overflow-x: hidden;
+        user-select: none;
+        box-sizing: border-box;
+    }
+
+    /* Ambient Luxury Glow Effects */
+    .luxury-ambient-glow {
+        position: absolute;
+        pointer-events: none;
+        border-radius: 50%;
+        filter: blur(80px);
+        z-index: 1;
+    }
+    .glow-top {
+        top: -120px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 480px;
+        height: 280px;
+        background: rgba(212, 175, 55, 0.22);
+    }
+    .glow-bottom-right {
+        bottom: -80px;
+        right: 10%;
+        width: 320px;
+        height: 320px;
+        background: rgba(197, 155, 39, 0.15);
+    }
+    .glow-bottom-left {
+        bottom: -80px;
+        left: 10%;
+        width: 320px;
+        height: 320px;
+        background: rgba(2, 132, 199, 0.12);
+    }
+
+    /* Top Executive Header Bar */
+    .login-top-bar {
+        position: absolute;
+        top: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        max-width: 850px;
+        padding: 0 24px;
+        box-sizing: border-box;
+        z-index: 10;
+    }
+
+    .system-status-pill,
+    .system-time-pill {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(8px);
+        border: 1px solid var(--border-color);
+        padding: 6px 14px;
+        border-radius: 30px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--text-dark);
+        box-shadow: 0 4px 12px rgba(60, 35, 18, 0.05);
+    }
+
+    .status-pulse-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #10b981;
+        box-shadow: 0 0 10px #10b981;
+        animation: statusPulse 2s infinite ease-in-out;
+    }
+
+    @@keyframes statusPulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.3); opacity: 0.7; }
+    }
+
+    .time-separator {
+        color: var(--accent-gold);
+        margin: 0 2px;
+    }
+
+    /* Main Executive Card */
+    .login-card {
+        position: relative;
+        background: #ffffff;
+        border: 2px solid var(--border-color);
+        border-radius: 28px;
+        box-shadow: 0 28px 65px rgba(60, 35, 18, 0.14),
+                    0 4px 20px rgba(197, 155, 39, 0.10),
+                    inset 0 1px 0 #ffffff;
+        padding: 40px 44px 34px 44px;
+        width: 100%;
+        max-width: 440px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 22px;
+        z-index: 5;
+        box-sizing: border-box;
+        transition: box-shadow 0.3s ease;
+    }
+
+    /* Top Wood & Gold Inlay Line */
+    .card-wood-inlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 6px;
+        background: var(--wood-trim-gradient);
+        border-radius: 26px 26px 0 0;
+    }
+
+    /* Login Header */
+    .login-header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 12px;
+        width: 100%;
+    }
+
+    .login-logo-circle {
+        width: 106px;
+        height: 106px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        filter: drop-shadow(0 10px 24px rgba(45, 24, 12, 0.22));
+        position: relative;
+        animation: floatGently 3s ease-in-out infinite;
+    }
+
+    .login-logo-img {
+        width: 106px;
+        height: 106px;
+        object-fit: contain;
+        border-radius: 50%;
+    }
+
+    @@keyframes floatGently {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-3px); }
+    }
+
+    .header-text-group {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .login-title {
+        font-size: 1.55rem;
+        font-weight: 800;
+        color: var(--wood-dark);
+        margin: 0;
+        letter-spacing: -0.3px;
+    }
+
+    .login-tagline {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--accent-gold);
+        background: var(--accent-gold-bg);
+        border: 1px solid rgba(212, 175, 55, 0.35);
+        padding: 3px 12px;
+        border-radius: 20px;
+    }
+
+    .tagline-star {
+        font-size: 0.7rem;
+        color: var(--accent-gold);
+    }
+
+    .login-instruction {
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        margin: 4px 0 0 0;
+    }
+
+    /* 4-Digit PIN Indicators (Strictly RTL Layout) */
+    .pin-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+    }
+
+    .pin-display-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 18px;
+        padding: 6px 0;
+        direction: rtl; /* RTL: 1st slot is on the Right! */
+    }
+
+    .pin-slot {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 2.5px solid var(--border-color);
+        background: #fbf9f5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: inset 0 2px 4px rgba(90, 70, 40, 0.08);
+        transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        position: relative;
+    }
+
+    .pin-slot.current-active {
+        border-color: var(--accent-gold);
+        box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.2), inset 0 2px 4px rgba(90, 70, 40, 0.06);
+        animation: currentSlotPulse 1.4s ease-in-out infinite alternate;
+    }
+
+    @@keyframes currentSlotPulse {
+        from { transform: scale(1); border-color: var(--accent-gold); }
+        to { transform: scale(1.08); border-color: var(--primary-blue); }
+    }
+
+    .pin-slot.filled {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+        border-color: #0284c7;
+        box-shadow: 0 4px 14px rgba(2, 132, 199, 0.45);
+        transform: scale(1.14);
+    }
+
+    .pin-jewel-dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #ffffff;
+        box-shadow: 0 0 6px #ffffff;
+    }
+
+    .pin-digit-text {
+        font-size: 1.15rem;
+        font-weight: 800;
+        color: #ffffff;
+        line-height: 1;
+    }
+
+    .btn-toggle-pin {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: pointer;
+        padding: 4px 10px;
+        border-radius: 12px;
+        transition: all 0.15s ease;
+        font-family: inherit;
+    }
+
+    .btn-toggle-pin:hover {
+        background: #f4ede1;
+        color: var(--text-dark);
+    }
+
+    /* Error & Loading Badges */
+    .login-error-badge {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #fef2f2;
+        border: 1.8px solid #f87171;
+        color: #991b1b;
+        font-size: 0.85rem;
+        font-weight: 700;
+        padding: 10px 16px;
+        border-radius: 14px;
+        width: 100%;
+        justify-content: center;
+        box-sizing: border-box;
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.12);
+    }
+
+    .auth-loading-badge {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #eff6ff;
+        border: 1.5px solid #93c5fd;
+        color: #1e40af;
+        font-size: 0.84rem;
+        font-weight: 700;
+        padding: 9px 16px;
+        border-radius: 14px;
+        width: 100%;
+        justify-content: center;
+        box-sizing: border-box;
+    }
+
+    .auth-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2.5px solid #bfdbfe;
+        border-top-color: #1e40af;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    .shake-error {
+        animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    }
+
+    @@keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        15%, 45%, 75% { transform: translateX(-8px); }
+        30%, 60%, 90% { transform: translateX(8px); }
+    }
+
+    /* Keypad Grid (Strict RTL Layout) */
+    .keypad-container {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+    }
+
+    .keypad-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        width: 100%;
+        max-width: 320px;
+        direction: rtl; /* STRICT RTL: 1 is in Col 1 (Right), 2 is Center, 3 is Col 3 (Left) */
+    }
+
+    .keypad-btn {
+        background: #faf8f5;
+        border: 1.8px solid var(--border-color);
+        border-radius: 18px;
+        height: 64px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        user-select: none;
+        box-shadow: 0 3px 6px rgba(90, 70, 40, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+        font-family: inherit;
+        padding: 4px 0;
+        outline: none;
+    }
+
+    .keypad-btn .main-digit {
+        font-size: 1.65rem;
+        font-weight: 800;
+        color: var(--wood-dark);
+        line-height: 1.1;
+    }
+
+    .keypad-btn .sub-num {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #8c9ba5;
+        line-height: 1;
+        transition: color 0.15s ease;
+    }
+
+    .keypad-btn:hover {
+        background: #ffffff;
+        border-color: var(--accent-gold);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 18px rgba(197, 155, 39, 0.22), 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .keypad-btn:hover .sub-num {
+        color: var(--accent-gold);
+    }
+
+    .keypad-btn:active {
+        transform: translateY(1px) scale(0.95);
+        background: #f4ede1;
+        box-shadow: 0 1px 3px rgba(90, 70, 40, 0.1);
+    }
+
+    /* Functional Buttons (Clear C & Backspace) */
+    .keypad-btn.keypad-func {
+        background: #f3ede2;
+        border-color: #d8cdb8;
+    }
+
+    .keypad-btn.keypad-clear .main-digit {
+        font-size: 1.35rem;
+        color: var(--accent-gold);
+    }
+
+    .keypad-btn.keypad-clear:hover {
+        background: #fef3c7;
+        border-color: #f59e0b;
+    }
+
+    .keypad-btn.keypad-clear:hover .main-digit,
+    .keypad-btn.keypad-clear:hover .sub-num {
+        color: #b45309;
+    }
+
+    .keypad-btn.keypad-backspace {
+        color: var(--text-muted);
+    }
+
+    .keypad-btn.keypad-backspace svg {
+        color: var(--text-dark);
+        transition: color 0.15s ease;
+    }
+
+    .keypad-btn.keypad-backspace:hover {
+        background: #fee2e2;
+        border-color: #ef4444;
+    }
+
+    .keypad-btn.keypad-backspace:hover svg,
+    .keypad-btn.keypad-backspace:hover .sub-num {
+        color: #b91c1c;
+    }
+
+    /* Footer Info */
+    .login-footer-info {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        margin-top: 2px;
+    }
+
+    .footer-hint-badge {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-align: center;
+        line-height: 1.3;
+    }
+
+    @@media (max-width: 520px) {
+        .login-card {
+            padding: 30px 22px;
+            border-radius: 20px;
+        }
+        .login-top-bar {
+            position: static;
+            margin-bottom: 16px;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .keypad-grid {
+            gap: 8px;
+        }
+        .keypad-btn {
+            height: 58px;
+        }
+    }
+</style>
+
+@code {
+    private ElementReference _containerRef;
+    private ElementReference _hiddenInputRef;
+    private string _enteredPin = "";
+    private string? _errorMessage;
+    private bool _hasError = false;
+    private bool _isAuthenticating = false;
+    private bool _showPin = false;
+    private long _lastKeyPressTicks = 0;
+
+    private string _currentTimeString = "";
+    private string _currentDateString = "";
+    private System.Threading.Timer? _clockTimer;
+
+    protected override void OnInitialized()
+    {
+        UpdateSystemDateTime();
+        _clockTimer = new System.Threading.Timer(_ =>
+        {
+            UpdateSystemDateTime();
+            InvokeAsync(StateHasChanged);
+        }, null, 10000, 10000);
+    }
+
+    private void UpdateSystemDateTime()
+    {
+        var now = DateTime.Now;
+        _currentTimeString = now.ToString("HH:mm");
+        _currentDateString = GetArabicDateFormatted(now);
+    }
+
+    private static string GetArabicDateFormatted(DateTime dt)
+    {
+        string[] days = { "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت" };
+        string[] months = {
+            "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+            "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
+        };
+
+        var dayName = days[(int)dt.DayOfWeek];
+        var monthName = months[dt.Month - 1];
+        return $"{dayName}، {dt.Day} {monthName} {dt.Year}";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await _hiddenInputRef.FocusAsync();
+            }
+            catch
+            {
+                try { await _containerRef.FocusAsync(); } catch { }
+            }
+        }
+    }
+
+    private async Task FocusInput()
+    {
+        try
+        {
+            await _hiddenInputRef.FocusAsync();
+        }
+        catch
+        {
+            try { await _containerRef.FocusAsync(); } catch { }
+        }
+    }
+
+    private void TogglePinVisibility()
+    {
+        _showPin = !_showPin;
+    }
+
+    private async Task AppendDigit(string digit)
+    {
+        if (_isAuthenticating) return;
+
+        if (_enteredPin.Length < 4)
+        {
+            try { await JSRuntime.InvokeVoidAsync("carAudio.playKeyClick"); } catch { }
+
+            _enteredPin += digit;
+            _errorMessage = null;
+            _hasError = false;
+
+            if (_enteredPin.Length == 4)
+            {
+                await Task.Delay(100);
+                await AttemptLoginAsync();
+            }
+        }
+    }
+
+    private async Task BackspacePin()
+    {
+        if (_isAuthenticating) return;
+
+        if (_enteredPin.Length > 0)
+        {
+            try { await JSRuntime.InvokeVoidAsync("carAudio.playKeyClick"); } catch { }
+
+            _enteredPin = _enteredPin.Substring(0, _enteredPin.Length - 1);
+            _errorMessage = null;
+            _hasError = false;
+        }
+    }
+
+    private async Task ClearPin()
+    {
+        if (_isAuthenticating) return;
+
+        try { await JSRuntime.InvokeVoidAsync("carAudio.playKeyClick"); } catch { }
+
+        _enteredPin = "";
+        _errorMessage = null;
+        _hasError = false;
+    }
+
+    private static char NormalizeDigit(char c)
+    {
+        if (c >= '0' && c <= '9') return c;
+        if (c >= '٠' && c <= '٩') return (char)('0' + (c - '٠')); // Eastern Arabic numerals
+        if (c >= '۰' && c <= '۹') return (char)('0' + (c - '۰')); // Persian/Urdu numerals
+        return c;
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (_isAuthenticating) return;
+        if (e.Repeat) return;
+
+        // Debounce to prevent any double-trigger within 70ms
+        var currentTicks = Environment.TickCount64;
+        if (currentTicks - _lastKeyPressTicks < 70)
+        {
+            return;
+        }
+        _lastKeyPressTicks = currentTicks;
+
+        // Check if digit was pressed (0-9, Arabic numerals, or Numpad/Digit codes)
+        string? digit = null;
+
+        if (e.Key.Length == 1 && char.IsDigit(e.Key[0]))
+        {
+            digit = NormalizeDigit(e.Key[0]).ToString();
+        }
+        else if (!string.IsNullOrEmpty(e.Code) && e.Code.StartsWith("Numpad") && e.Code.Length == 7 && char.IsDigit(e.Code[6]))
+        {
+            digit = e.Code[6].ToString();
+        }
+        else if (!string.IsNullOrEmpty(e.Code) && e.Code.StartsWith("Digit") && e.Code.Length == 6 && char.IsDigit(e.Code[5]))
+        {
+            digit = e.Code[5].ToString();
+        }
+
+        if (digit != null)
+        {
+            await AppendDigit(digit);
+            return;
+        }
+
+        if (e.Key == "Backspace")
+        {
+            await BackspacePin();
+        }
+        else if (e.Key == "Escape" || e.Key == "Delete")
+        {
+            await ClearPin();
+        }
+        else if (e.Key == "Enter" || e.Key == "NumpadEnter" || e.Code == "NumpadEnter")
+        {
+            if (_enteredPin.Length == 4)
+            {
+                await AttemptLoginAsync();
+            }
+            else
+            {
+                _errorMessage = "يرجى إدخال 4 أرقام لرمز المرور.";
+            }
+        }
+    }
+
+    private async Task AttemptLoginAsync()
+    {
+        if (_isAuthenticating) return;
+        _isAuthenticating = true;
+        _errorMessage = null;
+        _hasError = false;
+
+        try
+        {
+            // Authenticate directly against the database
+            var authenticatedUser = await RentalService.AuthenticateUserWithPinAsync(_enteredPin);
+
+            if (authenticatedUser != null)
+            {
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("carAudio.playEngineStart");
+                    await Task.Delay(650);
+                }
+                catch { }
+
+                AuthState.Login(authenticatedUser);
+            }
+            else
+            {
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("carAudio.playNotification", "danger");
+                }
+                catch { }
+
+                _hasError = true;
+                _errorMessage = "رمز المرور غير صحيح! يرجى إدخال الرمز السري الصحيح.";
+                _enteredPin = "";
+            }
+        }
+        catch
+        {
+            _hasError = true;
+            _errorMessage = "تعذر تسجيل الدخول حالياً، يرجى المحاولة مرة أخرى أو مراجعة مسؤول النظام.";
+            _enteredPin = "";
+        }
+        finally
+        {
+            _isAuthenticating = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _clockTimer?.Dispose();
+    }
+}

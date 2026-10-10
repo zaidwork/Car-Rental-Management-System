@@ -1,0 +1,239 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Interfaces
+@using CarRental.App.Components.Shared
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+
+@if (Vehicle != null)
+{
+<div class="modal-overlay">
+    <div class="modal-card" style="max-width: 1040px; width: 95%;">
+        <!-- Header -->
+        <div class="modal-header">
+            <div class="modal-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary-blue)" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>كشف حالة المركبة، فحص الخدوش والضربات وتوثيق الهيكل</span>
+            </div>
+            <button class="btn-close-modal" @onclick="OnClose">×</button>
+        </div>
+
+        <!-- Body -->
+        <div class="modal-body" style="gap: 16px;">
+            <!-- Vehicle Info Card -->
+            <div style="background: #fdfaf4; border: 1.5px solid var(--border-color); border-radius: 10px; padding: 12px 18px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    @if (!string.IsNullOrEmpty(Vehicle.ImageUrl))
+                    {
+                        <img src="@Vehicle.ImageUrl" alt="@Vehicle.Model" style="width: 64px; height: 42px; object-fit: contain; background: #fff; border-radius: 6px; padding: 2px; border: 1.5px solid var(--border-color);" />
+                    }
+                    else
+                    {
+                        <div style="width: 64px; height: 42px; background: #f3efe6; border-radius: 6px; border: 1.5px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">🚗</div>
+                    }
+                    <div>
+                        <div style="font-weight: 800; color: var(--text-main); font-size: 1.05rem;">
+                            @Vehicle.Brand @Vehicle.Model (@Vehicle.ModelYear)
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; gap: 8px;">
+                            <span>اللون: <strong>@Vehicle.Color</strong></span>
+                            <span>•</span>
+                            <span>العداد الحالي: <strong>@Vehicle.CurrentOdometer.ToString("N0") كم</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-family: monospace; font-size: 1rem; font-weight: bold; background: #ede6d8; padding: 5px 12px; border-radius: 6px; color: var(--primary-blue); border: 1.5px solid var(--border-color);">
+                        لوحة: @Vehicle.PlateNumber
+                    </span>
+
+                    @if (_activeMarksCount > 0)
+                    {
+                        <span style="background: #fee2e2; color: #dc2626; border: 1.5px solid #ef4444; padding: 5px 12px; border-radius: 6px; font-weight: 800; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 4px;">
+                            ⚠️ @_activeMarksCount أضرار مسجلة
+                        </span>
+                    }
+                    else
+                    {
+                        <span style="background: #d1fae5; color: #065f46; border: 1.5px solid #10b981; padding: 5px 12px; border-radius: 6px; font-weight: 800; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 4px;">
+                            🟢 الهيكل سليم
+                        </span>
+                    }
+                </div>
+            </div>
+
+            <!-- Tab Switcher -->
+            <div style="display: flex; gap: 8px; border-bottom: 2px solid var(--border-subtle); padding-bottom: 8px;">
+                <button type="button" class="filter-pill @(_currentTab == "diagram" ? "active" : "")" style="padding: 6px 16px; font-size: 0.86rem; font-weight: bold;" @onclick='() => _currentTab = "diagram"'>
+                    🎨 مخطط الهيكل وكشف الخدوش والضربات
+                </button>
+                <button type="button" class="filter-pill @(_currentTab == "history" ? "active" : "")" style="padding: 6px 16px; font-size: 0.86rem; font-weight: bold;" @onclick='() => _currentTab = "history"'>
+                    📜 سجل كشوفات الفحص السابقة (@_inspectionsHistory?.Count ?? 0)
+                </button>
+            </div>
+
+            @if (_currentTab == "diagram")
+            {
+                <!-- The Interactive Condition Diagram Component -->
+                <VehicleConditionDiagram Marks="@_marks" 
+                                        MarksChanged="OnMarksChanged"
+                                        CurrentStaffUsername="@CurrentStaff"
+                                        InspectionPhase="Initial"
+                                        OnDamagesUpdated="StateHasChanged" />
+            }
+            else
+            {
+                <!-- History of Previous Inspections -->
+                <div style="background: #ffffff; border: 1.5px solid var(--border-color); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                    <div style="font-weight: 800; color: var(--text-main); font-size: 0.95rem;">
+                        سجل كشوفات فحص وتسليم المركبة عبر العقود السابقة:
+                    </div>
+
+                    @if (_isLoadingHistory)
+                    {
+                        <div style="text-align: center; padding: 30px; color: var(--text-muted);">
+                            جاري تحميل سجل الفحوصات...
+                        </div>
+                    }
+                    else if (_inspectionsHistory != null && _inspectionsHistory.Any())
+                    {
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            @foreach (var insp in _inspectionsHistory)
+                            {
+                                <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-weight: bold; font-size: 0.9rem; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                                            <span>@(insp.Type == CarRental.Core.Enums.InspectionType.HandoverOut ? "📤 تسليم للعميل (خروج)" : "📥 استلام من العميل (عودة)")</span>
+                                            <span style="font-size: 0.78rem; font-weight: normal; color: var(--text-muted);">(@insp.InspectionDateTime.ToString("yyyy/MM/dd HH:mm"))</span>
+                                        </div>
+                                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                                            <span>العقد: <strong>@(insp.Contract?.ContractNumber ?? "عام")</strong></span>
+                                            <span> | المستأجر: <strong>@(insp.Contract?.Customer?.FullName ?? "غير محدد")</strong></span>
+                                            <span> | الموظف: <strong>@insp.StaffUsername</strong></span>
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(insp.DamageNotes) || !string.IsNullOrEmpty(insp.ScratchesDescription))
+                                        {
+                                            <div style="font-size: 0.78rem; color: #b91c1c; margin-top: 4px; font-weight: 600;">
+                                                ملاحظات: @(insp.ScratchesDescription ?? insp.DamageNotes)
+                                            </div>
+                                        }
+                                    </div>
+
+                                    <div style="text-align: left; font-size: 0.8rem;">
+                                        <div>العداد: <strong>@insp.Odometer.ToString("N0") كم</strong></div>
+                                        <div>الوقود: <strong>@insp.FuelLevel</strong></div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div style="text-align: center; color: var(--text-muted); padding: 30px; font-size: 0.9rem;">
+                            لا توجد كشوفات فحص سابقة مسجلة لهذه المركبة.
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(_statusMessage))
+            {
+                <div style="padding: 10px 14px; border-radius: 8px; font-weight: bold; font-size: 0.88rem; @(_isError ? "background: #fee2e2; color: #991b1b; border: 1.5px solid #ef4444;" : "background: #d1fae5; color: #065f46; border: 1.5px solid #10b981;")">
+                    @_statusMessage
+                </div>
+            }
+        </div>
+
+        <!-- Footer -->
+        <div class="modal-footer">
+            <button type="button" class="filter-pill" @onclick="OnClose">إغلاق النافذة</button>
+            <button type="button" class="btn-primary-action" @onclick="SaveDamages" disabled="@_isSaving">
+                <span>@(_isSaving ? "جاري الحفظ..." : "حفظ وتثبيت حالة المركبة والخدوش")</span>
+            </button>
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    [Parameter] public Vehicle? Vehicle { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<VehicleDamageMark> _marks = new();
+    private List<VehicleInspection>? _inspectionsHistory;
+    private bool _isLoadingHistory = false;
+    private string _currentTab = "diagram";
+    private bool _isSaving = false;
+    private string? _statusMessage;
+    private bool _isError = false;
+
+    private int _activeMarksCount => _marks.Count(m => !m.IsRepaired);
+
+    private string CurrentStaff => !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username)
+        ? AuthState.CurrentUser.Username
+        : AuthState.CurrentUser.FullName;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Vehicle != null)
+        {
+            _marks = Vehicle.GetDamageMarks();
+            await LoadInspectionsHistory();
+        }
+    }
+
+    private async Task LoadInspectionsHistory()
+    {
+        if (Vehicle == null) return;
+        try
+        {
+            _isLoadingHistory = true;
+            _inspectionsHistory = await RentalService.GetVehicleInspectionsByVehicleIdAsync(Vehicle.Id);
+        }
+        catch
+        {
+            _inspectionsHistory = new();
+        }
+        finally
+        {
+            _isLoadingHistory = false;
+        }
+    }
+
+    private void OnMarksChanged(List<VehicleDamageMark> updatedMarks)
+    {
+        _marks = updatedMarks;
+    }
+
+    private async Task SaveDamages()
+    {
+        if (Vehicle == null) return;
+
+        try
+        {
+            _isSaving = true;
+            _statusMessage = null;
+            _isError = false;
+
+            await RentalService.UpdateVehicleDamagesAsync(Vehicle.Id, _marks, CurrentStaff);
+            
+            _statusMessage = "تم حفظ وتحديث حالة المركبة ومخطط الخدوش بنجاح!";
+            await Task.Delay(800);
+            await OnSaved.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _statusMessage = "حدث خطأ أثناء الحفظ: " + ex.Message;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

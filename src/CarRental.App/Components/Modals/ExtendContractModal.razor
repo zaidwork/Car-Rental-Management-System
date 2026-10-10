@@ -1,0 +1,168 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Interfaces
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+
+@if (Contract != null)
+{
+<div class="modal-overlay">
+    <div class="modal-card" style="max-width: 620px;">
+        <div class="modal-header">
+            <div class="modal-title">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-blue)" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span>تمديد عقد التأجير (@Contract.ContractNumber)</span>
+            </div>
+            <button class="btn-close-modal" @onclick="OnClose">×</button>
+        </div>
+
+        <div class="modal-body">
+            <!-- Contract & Vehicle Summary Card -->
+            <div style="background: #fdfaf4; border: 1.5px solid var(--border-color); border-radius: 10px; padding: 14px 18px; display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between;">
+                    <span>المستأجر: <strong>@Contract.Customer?.FullName</strong></span>
+                    <span style="color: var(--primary-blue); font-weight: bold;">لوحة: @Contract.Vehicle?.PlateNumber</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.86rem; color: var(--text-muted);">
+                    <span>السيارة: @Contract.Vehicle?.Brand @Contract.Vehicle?.Model</span>
+                    <span>تاريخ الإرجاع السابق: <strong>@Contract.ExpectedReturnDateTime.ToString("yyyy/MM/dd HH:mm")</strong></span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.86rem;">
+                    <span>السعر اليومي الحالي: <strong>@Contract.DailyAgreedRate.ToString("N0") ₪/يوم</strong></span>
+                    <span>المتبقي ذمم حالياً: <strong style="color: var(--accent-red);">@Contract.RemainingAmount.ToString("N0") ₪</strong></span>
+                </div>
+            </div>
+
+            <!-- Extension Form -->
+            <div class="form-grid-2">
+                <div class="form-group">
+                    <label class="form-label">تاريخ ووقت الإرجاع الجديد المتفق عليه:</label>
+                    <input type="datetime-local" class="form-control" @bind="_newReturnDateTime" @bind:after="Recalculate" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">سعر اليوم الإضافي (₪):</label>
+                    <input type="number" class="form-control" @bind="_dailyRate" @bind:after="Recalculate" min="0" />
+                </div>
+            </div>
+
+            <!-- Calculated Summary Box -->
+            <div style="background: #e0f2fe; border: 1.5px solid #0284c7; border-radius: 10px; padding: 14px 18px; display: flex; flex-direction: column; gap: 6px; color: #0369a1;">
+                <div style="display: flex; justify-content: space-between; font-weight: bold;">
+                    <span>عدد الأيام الإضافية:</span>
+                    <span>@_extraDays يوم</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: 1.05rem;">
+                    <span>قيمة التمديد الإضافية:</span>
+                    <span>+@_extensionAmount.ToString("N0") ₪</span>
+                </div>
+                <div style="font-size: 0.8rem; color: #0284c7; border-top: 1px dashed #bae6fd; padding-top: 4px; margin-top: 4px;">
+                    سيتم تحديث تاريخ استحقاق كمبيالة الضمان تلقائياً حتى تاريخ الإرجاع الجديد.
+                </div>
+            </div>
+
+            <div class="form-grid-2">
+                <div class="form-group">
+                    <label class="form-label">الدفعة النقدية المسددة الآن (₪):</label>
+                    <input type="number" class="form-control" @bind="_paidAmount" min="0" />
+                    <span style="font-size: 0.76rem; color: var(--text-muted);">المتبقي بعد التمديد: <strong>@((Contract.RemainingAmount + _extensionAmount - _paidAmount).ToString("N0")) ₪</strong></span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">طريقة استلام الدفعة:</label>
+                    <select class="form-control" @bind="_paymentMode">
+                        <option value="@PaymentMode.ImmediateCash">نقداً بالصندوق (Cash)</option>
+                        <option value="@PaymentMode.BankTransfer">تحويل بنكي</option>
+                        <option value="@PaymentMode.CreditCard">بطاقة ائتمان / فيزا</option>
+                        <option value="@PaymentMode.DeferredOnReturn">مؤجل على الحساب (ذمم)</option>
+                    </select>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div style="background: #fee2e2; color: #dc2626; border: 1.5px solid #ef4444; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 0.88rem;">
+                    ⚠️ @_errorMessage
+                </div>
+            }
+        </div>
+
+        <div class="modal-footer">
+            <button class="filter-pill" @onclick="OnClose">إلغاء</button>
+            <button class="btn-primary-action" @onclick="ConfirmExtension" disabled="@_isSubmitting">
+                <span>@( _isSubmitting ? "جاري الحفظ والتحديث..." : "تأكيد التمديد وترحيل الحسابات" )</span>
+            </button>
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    [Parameter] public Contract? Contract { get; set; }
+    [Parameter] public EventCallback OnExtended { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private DateTime _newReturnDateTime;
+    private decimal _dailyRate;
+    private int _extraDays = 1;
+    private decimal _extensionAmount = 0;
+    private decimal _paidAmount = 0;
+    private PaymentMode _paymentMode = PaymentMode.ImmediateCash;
+    private bool _isSubmitting = false;
+    private string? _errorMessage;
+
+    protected override void OnInitialized()
+    {
+        if (Contract != null)
+        {
+            _newReturnDateTime = Contract.ExpectedReturnDateTime.AddDays(1);
+            _dailyRate = Contract.DailyAgreedRate;
+            Recalculate();
+        }
+    }
+
+    private void Recalculate()
+    {
+        if (Contract == null) return;
+        if (_newReturnDateTime <= Contract.ExpectedReturnDateTime)
+        {
+            _extraDays = 0;
+            _extensionAmount = 0;
+            return;
+        }
+
+        _extraDays = Math.Max(1, (int)Math.Ceiling((_newReturnDateTime - Contract.ExpectedReturnDateTime).TotalDays));
+        _extensionAmount = _extraDays * _dailyRate;
+    }
+
+    private async Task ConfirmExtension()
+    {
+        if (Contract == null) return;
+        _errorMessage = null;
+        if (_newReturnDateTime <= Contract.ExpectedReturnDateTime)
+        {
+            _errorMessage = "تاريخ الإرجاع الجديد يجب أن يكون بعد التاريخ الحالي للإرجاع!";
+            return;
+        }
+
+        try
+        {
+            _isSubmitting = true;
+            var staff = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username) 
+                ? AuthState.CurrentUser.Username 
+                : AuthState.CurrentUser.FullName;
+
+            await RentalService.ExtendContractAsync(Contract.Id, _newReturnDateTime, _dailyRate, _paidAmount, staff);
+            await OnExtended.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.InnerException?.Message ?? ex.Message;
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+}

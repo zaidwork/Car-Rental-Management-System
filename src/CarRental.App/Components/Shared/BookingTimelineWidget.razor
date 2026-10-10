@@ -1,0 +1,1840 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Interfaces
+@using CarRental.Infrastructure.Helpers
+@inject IRentalSystemService RentalService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<div class="timeline-section-card">
+    <!-- Header -->
+    <div class="timeline-header">
+        <div class="timeline-title-group">
+            <div class="timeline-icon-box">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+            </div>
+            <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="timeline-title">مخطط الحجوزات والتعاقدات (Booking Timeline & Countdown)</span>
+                    <span class="live-clock-badge">
+                        <span class="live-dot-pulse"></span>
+                        الوقت الآن: @_currentTime.ToString("yyyy/MM/dd • HH:mm:ss")
+                    </span>
+                </div>
+                <div class="timeline-subtitle">
+                    متابعة فورية للمركبات المؤجرة بالشارع، مواعيد العودة الدقيقة، وعدادات تنازلية حية
+                </div>
+            </div>
+        </div>
+
+        <div class="timeline-header-actions">
+            <!-- View Mode Switcher: Cards vs Gantt -->
+            <div class="scale-switcher" style="background: #e2e8f0; padding: 3px;">
+                <button class="scale-btn @(_viewMode == "cards" ? "active" : "")" @onclick='() => _viewMode = "cards"' title="عرض البطاقات الذكية والمواعيد التفصيلية">
+                    📇 بطاقات المواعيد (الأوضح)
+                </button>
+                <button class="scale-btn @(_viewMode == "gantt" ? "active" : "")" @onclick='() => _viewMode = "gantt"' title="عرض المخطط الشريطي على مدار الأيام">
+                    📊 المخطط الشريطي (Gantt)
+                </button>
+            </div>
+
+            @if (_viewMode == "gantt")
+            {
+                <div class="scale-switcher">
+                    <button class="scale-btn @(_timelineDays == 7 ? "active" : "")" @onclick="() => SetScale(7)">
+                        📅 أسبوعي (7 أيام)
+                    </button>
+                    <button class="scale-btn @(_timelineDays == 14 ? "active" : "")" @onclick="() => SetScale(14)">
+                        🗓️ 14 يوم
+                    </button>
+                    <button class="scale-btn @(_timelineDays == 30 ? "active" : "")" @onclick="() => SetScale(30)">
+                        📊 30 يوم
+                    </button>
+                </div>
+            }
+
+            <button class="btn-primary-action" style="padding: 7px 16px; font-size: 0.82rem;" @onclick='() => Navigation.NavigateTo("contracts")'>
+                <span>شاشة العقود ←</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Top Executive KPIs for Timeline -->
+    <div class="timeline-kpi-strip">
+        <div class="timeline-kpi-item tl-kpi-blue">
+            <span class="tl-kpi-icon">🚗</span>
+            <div class="tl-kpi-texts">
+                <span class="tl-kpi-title">سيارات مؤجرة حالياً بالشارع</span>
+                <strong class="tl-kpi-val">@EffectiveContracts.Count <small>مركبة</small></strong>
+            </div>
+        </div>
+
+        <div class="timeline-kpi-item @(OverdueCount > 0 ? "tl-kpi-red" : "tl-kpi-green")">
+            <span class="tl-kpi-icon">@(OverdueCount > 0 ? "🚨" : "✓")</span>
+            <div class="tl-kpi-texts">
+                <span class="tl-kpi-title">متأخرة عن موعد الإرجاع</span>
+                <strong class="tl-kpi-val" style="color: @(OverdueCount > 0 ? "#dc2626" : "#15803d");">
+                    @OverdueCount <small>مركبة</small>
+                </strong>
+            </div>
+        </div>
+
+        <div class="timeline-kpi-item @(DueTodayCount > 0 ? "tl-kpi-amber" : "tl-kpi-blue")">
+            <span class="tl-kpi-icon">⏱️</span>
+            <div class="tl-kpi-texts">
+                <span class="tl-kpi-title">تستحق العودة والتسليم اليوم</span>
+                <strong class="tl-kpi-val" style="color: @(DueTodayCount > 0 ? "#b45309" : "#0284c7");">
+                    @DueTodayCount <small>مركبة</small>
+                </strong>
+            </div>
+        </div>
+
+        <div class="timeline-kpi-item tl-kpi-green">
+            <span class="tl-kpi-icon">🟢</span>
+            <div class="tl-kpi-texts">
+                <span class="tl-kpi-title">تسير وفق المدة الطبيعية</span>
+                <strong class="tl-kpi-val" style="color: #15803d;">
+                    @OnTrackCount <small>مركبة</small>
+                </strong>
+            </div>
+        </div>
+    </div>
+
+    @if (EffectiveContracts != null && EffectiveContracts.Any())
+    {
+        @if (_viewMode == "cards")
+        {
+            <!-- 📇 Primary Cards View: Spacious, Ultra-Readable, Effortless Understanding -->
+            <div class="timeline-cards-list">
+                @foreach (var c in EffectiveContracts)
+                {
+                    var timeRemaining = c.ExpectedReturnDateTime - _currentTime;
+                    var isOverdue = timeRemaining.TotalSeconds < 0 && !c.IsOpenEnded;
+                    var isDueToday = !c.IsOpenEnded && c.ExpectedReturnDateTime.Date == DateTime.Today && !isOverdue;
+                    var totalDuration = (c.ExpectedReturnDateTime - c.StartDateTime).TotalHours;
+                    var elapsedHours = (_currentTime - c.StartDateTime).TotalHours;
+                    var progressPercent = totalDuration > 0 ? Math.Clamp((elapsedHours / totalDuration) * 100.0, 0, 100) : 0;
+
+                    <div class="timeline-smart-card @(isOverdue ? "card-overdue" : (isDueToday ? "card-due-today" : "card-active"))">
+                        <!-- Col 1: Vehicle & Plate -->
+                        <div class="tl-card-col-vehicle">
+                            <div class="tl-card-thumb">
+                                <img src="@(string.IsNullOrEmpty(c.Vehicle?.ImageUrl) ? "images/cars/accent_white.jpg" : c.Vehicle.ImageUrl)" 
+                                     alt="Car" class="tl-card-img" />
+                            </div>
+                            <div class="tl-card-vehicle-details">
+                                <span class="tl-card-vehicle-title">@(c.Vehicle?.Brand) @(c.Vehicle?.Model)</span>
+                                <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                                    <span class="tl-plate-badge">@(c.Vehicle?.PlateNumber)</span>
+                                    <span class="tl-contract-pill">@c.ContractNumber</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Col 2: Customer, Dates & Progress -->
+                        <div class="tl-card-col-customer">
+                            <div class="tl-customer-header">
+                                <span class="tl-customer-name">👤 @(c.Customer?.FullName ?? "عميل غير محدد")</span>
+                                @if (!string.IsNullOrEmpty(c.Customer?.PrimaryPhone))
+                                {
+                                    <button class="tl-btn-whatsapp" @onclick="() => SendWhatsApp(c)" title="تواصل واتساب مع المستأجر">
+                                        💬 واتساب: @c.Customer.PrimaryPhone
+                                    </button>
+                                }
+                            </div>
+
+                            <div class="tl-dates-line">
+                                @if (c.IsOpenEnded)
+                                {
+                                    <span>بدء التأجير: <strong>@c.StartDateTime.ToString("yyyy/MM/dd")</strong></span>
+                                    <span class="tl-open-badge">♾️ عقد مفتوح (@c.OpenRentalDays يوم)</span>
+                                }
+                                else
+                                {
+                                    <span>من: <strong>@c.StartDateTime.ToString("MM/dd HH:mm")</strong></span>
+                                    <span style="color: #94a3b8;">⬅</span>
+                                    <span>إلى موعد التسليم: <strong style="color: #0f172a;">@c.ExpectedReturnDateTime.ToString("yyyy/MM/dd • hh:mm tt")</strong></span>
+                                }
+                            </div>
+
+                            @if (!c.IsOpenEnded)
+                            {
+                                <div class="tl-progress-container">
+                                    <div class="tl-progress-bar">
+                                        <div class="tl-progress-fill @(isOverdue ? "fill-overdue" : "fill-active")" style="width: @(progressPercent.ToString("F0"))%;"></div>
+                                    </div>
+                                    <span class="tl-progress-label">
+                                        @(isOverdue ? "100% (تجاوزت المدة المقررة)" : $"{progressPercent:F0}% منقضي من المدة")
+                                    </span>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Col 3: Live Countdown Box -->
+                        <div class="tl-card-col-timer">
+                            @if (c.IsOpenEnded)
+                            {
+                                <div class="tl-countdown-box countdown-open">
+                                    <div class="tl-timer-head">
+                                        <span class="tl-timer-dot" style="background: #0284c7;"></span>
+                                        <span>عقد مفتوح مستمر</span>
+                                    </div>
+                                    <div class="tl-timer-main-text" style="color: #0369a1;">
+                                        @c.OpenRentalDays <span style="font-size: 0.85rem; font-weight: 700;">أيام تأجير حتى الآن</span>
+                                    </div>
+                                    <div class="tl-timer-sub">
+                                        حساب يومي: @c.DailyAgreedRate.ToString("N0") ₪
+                                    </div>
+                                </div>
+                            }
+                            else if (!isOverdue)
+                            {
+                                var totalSecs = (long)timeRemaining.TotalSeconds;
+                                var days = totalSecs / 86400;
+                                var hours = (totalSecs % 86400) / 3600;
+                                var minutes = (totalSecs % 3600) / 60;
+                                var seconds = totalSecs % 60;
+
+                                <div class="tl-countdown-box @(isDueToday ? "countdown-due-today" : "countdown-active")">
+                                    <div class="tl-timer-head">
+                                        <span class="tl-timer-dot" style="background: @(isDueToday ? "#f59e0b" : "#10b981");"></span>
+                                        <span style="font-weight: 800;">@(isDueToday ? "⚠️ تستحق الإرجاع اليوم:" : "⏳ متبقي على موعد التسليم:")</span>
+                                    </div>
+                                    <div class="tl-digits-strip">
+                                        @if (days > 0)
+                                        {
+                                            <div class="tl-digit-cell">
+                                                <span class="tl-d-num">@days</span>
+                                                <span class="tl-d-lbl">يوم</span>
+                                            </div>
+                                            <span class="tl-d-sep">:</span>
+                                        }
+                                        <div class="tl-digit-cell">
+                                            <span class="tl-d-num">@hours.ToString("D2")</span>
+                                            <span class="tl-d-lbl">ساعة</span>
+                                        </div>
+                                        <span class="tl-d-sep">:</span>
+                                        <div class="tl-digit-cell">
+                                            <span class="tl-d-num">@minutes.ToString("D2")</span>
+                                            <span class="tl-d-lbl">دقيقة</span>
+                                        </div>
+                                        <span class="tl-d-sep">:</span>
+                                        <div class="tl-digit-cell">
+                                            <span class="tl-d-num tl-sec-pulse">@seconds.ToString("D2")</span>
+                                            <span class="tl-d-lbl">ثانية</span>
+                                        </div>
+                                    </div>
+                                    <div class="tl-timer-sub">
+                                        موعد الإرجاع: @c.ExpectedReturnDateTime.ToString("dd/MM • hh:mm tt")
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                var overdueSecs = (long)(_currentTime - c.ExpectedReturnDateTime).TotalSeconds;
+                                var oDays = overdueSecs / 86400;
+                                var oHours = (overdueSecs % 86400) / 3600;
+                                var oMinutes = (overdueSecs % 3600) / 60;
+                                var oSeconds = overdueSecs % 60;
+
+                                <div class="tl-countdown-box countdown-overdue">
+                                    <div class="tl-timer-head">
+                                        <span class="tl-timer-dot" style="background: #dc2626;"></span>
+                                        <span style="font-weight: 900; color: #b91c1c;">🚨 متأخرة عن الإرجاع منذ:</span>
+                                    </div>
+                                    <div class="tl-digits-strip text-danger">
+                                        @if (oDays > 0)
+                                        {
+                                            <div class="tl-digit-cell cell-danger">
+                                                <span class="tl-d-num">@oDays</span>
+                                                <span class="tl-d-lbl">يوم</span>
+                                            </div>
+                                            <span class="tl-d-sep">:</span>
+                                        }
+                                        <div class="tl-digit-cell cell-danger">
+                                            <span class="tl-d-num">@oHours.ToString("D2")</span>
+                                            <span class="tl-d-lbl">ساعة</span>
+                                        </div>
+                                        <span class="tl-d-sep">:</span>
+                                        <div class="tl-digit-cell cell-danger">
+                                            <span class="tl-d-num">@oMinutes.ToString("D2")</span>
+                                            <span class="tl-d-lbl">دقيقة</span>
+                                        </div>
+                                        <span class="tl-d-sep">:</span>
+                                        <div class="tl-digit-cell cell-danger">
+                                            <span class="tl-d-num tl-sec-pulse-red">@oSeconds.ToString("D2")</span>
+                                            <span class="tl-d-lbl">ثانية</span>
+                                        </div>
+                                    </div>
+                                    <div class="tl-timer-sub" style="color: #b91c1c; font-weight: 800;">
+                                        ⚠️ تجاوزت موعد التسليم الرسمي!
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Col 4: Direct Action Buttons -->
+                        <div class="tl-card-col-actions">
+                            <button class="tl-btn-action-return" @onclick='() => Navigation.NavigateTo($"contracts?CloseId={c.Id}")' title="استلام المركبة وإجراء التسوية والمخالصة فوراً">
+                                <span>استلام وتسوية 📥</span>
+                            </button>
+
+                            @if (!c.IsOpenEnded)
+                            {
+                                <button class="tl-btn-action-extend" @onclick="() => OpenExtendModal(c)" title="تمديد فترة العقد">
+                                    <span>تمديد العقد ⏱️</span>
+                                </button>
+                            }
+
+                            <button class="tl-btn-action-manage" @onclick='() => Navigation.NavigateTo("contracts")' title="عرض تفاصيل العقد والطباعة">
+                                <span>إدارة العقد 📋</span>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <!-- 📊 Gantt Timeline Grid: Clean, Spacious, High-Contrast -->
+            <div class="timeline-axis-container">
+                <div class="axis-header-row">
+                    <div class="axis-col-vehicle" style="width: 250px;">المركبة والمستأجر</div>
+                    <div class="axis-col-counter" style="width: 240px;">⏱️ الوقت المتبقي / التأخير</div>
+                    <div class="axis-col-track">
+                        <div class="axis-days-grid" style="grid-template-columns: repeat(@_axisDays.Count, 1fr);">
+                            @foreach (var day in _axisDays)
+                            {
+                                <div class="axis-day-cell @(day.IsToday ? "cell-today" : "")">
+                                    <span class="axis-day-name">@day.DayName</span>
+                                    <span class="axis-day-date">@day.DateText</span>
+                                    @if (day.IsToday)
+                                    {
+                                        <span class="today-marker-tag">اليوم</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="axis-col-actions" style="width: 140px;">الإجراءات</div>
+                </div>
+
+                <!-- Timeline Rows -->
+                <div class="timeline-rows-list">
+                    @foreach (var c in EffectiveContracts)
+                    {
+                        var timeRemaining = c.ExpectedReturnDateTime - _currentTime;
+                        var isOverdue = timeRemaining.TotalSeconds < 0 && !c.IsOpenEnded;
+                        var totalDuration = (c.ExpectedReturnDateTime - c.StartDateTime).TotalHours;
+                        var elapsedHours = (_currentTime - c.StartDateTime).TotalHours;
+                        var progressPercent = totalDuration > 0 ? Math.Clamp((elapsedHours / totalDuration) * 100.0, 0, 100) : 0;
+                        var trackMetrics = CalculateTrackMetrics(c);
+
+                        <div class="timeline-contract-row @(isOverdue ? "row-overdue" : "")" style="min-height: 80px;">
+                            <!-- 1. Vehicle & Customer Details -->
+                            <div class="col-vehicle-info" style="width: 250px;">
+                                <div class="vehicle-thumb-box" style="width: 58px; height: 42px;">
+                                    <img src="@(string.IsNullOrEmpty(c.Vehicle?.ImageUrl) ? "images/cars/accent_white.jpg" : c.Vehicle.ImageUrl)" 
+                                         alt="Car" class="vehicle-img" />
+                                </div>
+                                <div class="vehicle-meta">
+                                    <div class="vehicle-name-row">
+                                        <span class="vehicle-title" style="font-size: 0.92rem; font-weight: 800;">@(c.Vehicle?.Brand) @(c.Vehicle?.Model)</span>
+                                    </div>
+                                    <div class="vehicle-sub-row">
+                                        <span class="tl-plate-badge" style="font-size: 0.74rem;">@(c.Vehicle?.PlateNumber)</span>
+                                        <span class="contract-code-badge" title="رقم العقد">@c.ContractNumber</span>
+                                    </div>
+                                    <div class="customer-info-line" style="font-size: 0.8rem;">
+                                        <span class="customer-name" style="font-weight: 700;">@(c.Customer?.FullName ?? "عميل")</span>
+                                        @if (!string.IsNullOrEmpty(c.Customer?.PrimaryPhone))
+                                        {
+                                            <button class="btn-whatsapp-mini" @onclick="() => SendWhatsApp(c)" title="تواصل واتساب مع المستأجر">
+                                                💬
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 2. Countdown Counter -->
+                            <div class="col-countdown-timer" style="width: 240px;">
+                                @if (c.IsOpenEnded)
+                                {
+                                    <div style="font-size: 0.84rem; font-weight: 800; color: #0284c7;">
+                                        ♾️ عقد مفتوح مستمر (@c.OpenRentalDays يوم)
+                                    </div>
+                                }
+                                else if (!isOverdue)
+                                {
+                                    var totalSecs = (long)timeRemaining.TotalSeconds;
+                                    var days = totalSecs / 86400;
+                                    var hours = (totalSecs % 86400) / 3600;
+                                    var minutes = (totalSecs % 3600) / 60;
+
+                                    <div class="countdown-card active-countdown" style="padding: 6px 10px;">
+                                        <div class="countdown-header-line" style="font-size: 0.75rem;">
+                                            <span class="timer-dot-green"></span>
+                                            <span>متبقي على موعد التسليم:</span>
+                                        </div>
+                                        <div style="font-size: 0.95rem; font-weight: 900; color: #15803d; direction: ltr; text-align: center;">
+                                            @if (days > 0) { <span>@days يوم • </span> }
+                                            <span>@hours.ToString("D2"):@minutes.ToString("D2")</span>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    var overdueSecs = (long)(_currentTime - c.ExpectedReturnDateTime).TotalSeconds;
+                                    var oDays = overdueSecs / 86400;
+                                    var oHours = (overdueSecs % 86400) / 3600;
+                                    var oMinutes = (overdueSecs % 3600) / 60;
+
+                                    <div class="countdown-card overdue-countdown" style="padding: 6px 10px;">
+                                        <div class="countdown-header-line" style="font-size: 0.75rem;">
+                                            <span class="timer-dot-red"></span>
+                                            <span style="color: #b91c1c; font-weight: 800;">🚨 متأخرة منذ:</span>
+                                        </div>
+                                        <div style="font-size: 0.95rem; font-weight: 900; color: #dc2626; direction: ltr; text-align: center;">
+                                            @if (oDays > 0) { <span>@oDays يوم • </span> }
+                                            <span>@oHours.ToString("D2"):@oMinutes.ToString("D2")</span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+
+                            <!-- 3. Gantt Track -->
+                            <div class="col-timeline-track">
+                                <div class="track-background-grid" style="grid-template-columns: repeat(@_axisDays.Count, 1fr);">
+                                    @for (int i = 0; i < _axisDays.Count; i++)
+                                    {
+                                        <div class="track-grid-cell @(_axisDays[i].IsToday ? "cell-today" : "")"></div>
+                                    }
+                                </div>
+
+                                @if (_nowMarkerPercent >= 0 && _nowMarkerPercent <= 100)
+                                {
+                                    <div class="current-time-marker" style="right: @(_nowMarkerPercent.ToString("F1"))%;">
+                                        <div class="marker-needle"></div>
+                                        <div class="marker-label">الآن (@_currentTime.ToString("HH:mm"))</div>
+                                    </div>
+                                }
+
+                                <div class="gantt-contract-bar @(isOverdue ? "bar-overdue" : "bar-active")"
+                                     style="right: @(trackMetrics.RightPercent.ToString("F1"))%; width: @(trackMetrics.WidthPercent.ToString("F1"))%;"
+                                     title="العقد: @c.ContractNumber | من: @c.StartDateTime.ToString("yyyy/MM/dd HH:mm") | حتى: @c.ExpectedReturnDateTime.ToString("yyyy/MM/dd HH:mm")">
+                                    
+                                    <div class="bar-progress-fill" style="width: @(progressPercent.ToString("F0"))%;"></div>
+                                    <div class="bar-content-label">
+                                        <span class="bar-dates-text">
+                                            @c.StartDateTime.ToString("MM/dd") ⬅ @c.ExpectedReturnDateTime.ToString("MM/dd HH:mm")
+                                        </span>
+                                        @if (!isOverdue)
+                                        {
+                                            <span class="bar-pct-text">(@(progressPercent.ToString("F0"))%)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="bar-overdue-tag">🚨 متأخرة</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 4. Quick Actions -->
+                            <div class="col-actions" style="width: 140px; display: flex; flex-direction: column; gap: 4px;">
+                                <button class="btn-manage-action" style="background: #10b981; color: white; border: none; font-weight: 800; font-size: 0.78rem; padding: 4px 8px; border-radius: 5px; cursor: pointer;" 
+                                        @onclick='() => Navigation.NavigateTo($"contracts?CloseId={c.Id}")' title="استلام المركبة">
+                                    <span>استلام 📥</span>
+                                </button>
+                                @if (!c.IsOpenEnded)
+                                {
+                                    <button class="btn-extend-action" style="padding: 4px 8px; font-size: 0.76rem;" @onclick="() => OpenExtendModal(c)" title="تمديد فترة العقد">
+                                        <span>تمديد ⏱️</span>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="timeline-empty-card">
+            <div class="empty-calendar-icon">📅</div>
+            <h4>لا توجد عقود أو حجوزات نشطة حالياً</h4>
+            <p>عند تأجير سيارة وإصدار عقد نشط، سيظهر مخطط مسار الحجز والعداد التنازلي اللحظي هنا تلقائياً.</p>
+            <button class="btn-primary-action" @onclick='() => Navigation.NavigateTo("contracts")'>
+                + فتح عقد تأجير جديد
+            </button>
+        </div>
+    }
+</div>
+
+@if (_selectedContractForExtend != null)
+{
+    <ExtendContractModal Contract="_selectedContractForExtend" 
+                         OnClose="() => _selectedContractForExtend = null" 
+                         OnExtended="HandleContractExtended" />
+}
+
+<style>
+    .timeline-section-card {
+        background: #ffffff;
+        border: 1.5px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 22px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        box-shadow: 0 4px 20px rgba(90, 70, 40, 0.06);
+        position: relative;
+        direction: rtl;
+        font-family: var(--font-family);
+    }
+
+    .timeline-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        border-bottom: 1.5px solid var(--border-color);
+        padding-bottom: 16px;
+    }
+
+    .timeline-title-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .timeline-icon-box {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: #e0f2fe;
+        border: 1.5px solid #bae6fd;
+        color: #0284c7;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .timeline-title {
+        font-size: 1.15rem;
+        font-weight: 800;
+        color: var(--text-main);
+    }
+
+    .live-clock-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #f8fafc;
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        padding: 3px 10px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        font-family: monospace;
+    }
+
+    .live-dot-pulse {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #16a34a;
+        box-shadow: 0 0 8px rgba(22, 163, 74, 0.6);
+        animation: dotPulse 1.2s infinite;
+    }
+
+    @@keyframes dotPulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.3); opacity: 0.6; }
+    }
+
+    .timeline-subtitle {
+        font-size: 0.82rem;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    .timeline-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .scale-switcher {
+        display: flex;
+        background: #f4ede1;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 2px;
+        gap: 2px;
+    }
+
+    .scale-btn {
+        background: transparent;
+        border: none;
+        border-radius: 8px;
+        padding: 5px 10px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .scale-btn.active {
+        background: #ffffff;
+        color: #0284c7;
+        font-weight: 800;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    }
+
+    /* KPI Strip */
+    .timeline-kpi-strip {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 12px;
+        margin-bottom: 4px;
+    }
+
+    .timeline-kpi-item {
+        background: #ffffff;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .timeline-kpi-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    }
+
+    .tl-kpi-blue { border-right: 4px solid #0284c7; }
+    .tl-kpi-red { border-right: 4px solid #ef4444; background: #fffbfb; }
+    .tl-kpi-amber { border-right: 4px solid #f59e0b; background: #fffdfa; }
+    .tl-kpi-green { border-right: 4px solid #10b981; }
+
+    .tl-kpi-icon {
+        font-size: 1.6rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .tl-kpi-texts {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .tl-kpi-title {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #64748b;
+    }
+
+    .tl-kpi-val {
+        font-size: 1.25rem;
+        font-weight: 900;
+        color: #0f172a;
+        line-height: 1.2;
+    }
+
+    .tl-kpi-val small {
+        font-size: 0.74rem;
+        font-weight: 600;
+        color: #94a3b8;
+        margin-right: 4px;
+    }
+
+    /* Cards View */
+    .timeline-cards-list {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .timeline-smart-card {
+        background: #ffffff;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 16px 20px;
+        display: grid;
+        grid-template-columns: 260px 1fr 280px 150px;
+        align-items: center;
+        gap: 20px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+        transition: all 0.2s ease;
+        position: relative;
+    }
+
+    .timeline-smart-card:hover {
+        border-color: #38bdf8;
+        box-shadow: 0 6px 20px rgba(2, 132, 199, 0.08);
+    }
+
+    .timeline-smart-card.card-active {
+        border-right: 5px solid #0284c7;
+    }
+
+    .timeline-smart-card.card-due-today {
+        border-right: 5px solid #f59e0b;
+        background: #fffdfa;
+    }
+
+    .timeline-smart-card.card-overdue {
+        border-right: 5px solid #ef4444;
+        background: #fff8f8;
+        border-color: #fca5a5;
+    }
+
+    /* Col 1: Vehicle */
+    .tl-card-col-vehicle {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .tl-card-thumb {
+        width: 68px;
+        height: 52px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    .tl-card-img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: cover;
+    }
+
+    .tl-card-vehicle-details {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        overflow: hidden;
+    }
+
+    .tl-card-vehicle-title {
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: #0f172a;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .tl-plate-badge {
+        font-size: 0.78rem;
+        font-weight: 800;
+        background: #fef08a;
+        border: 1px solid #facc15;
+        color: #854d0e;
+        padding: 2px 7px;
+        border-radius: 6px;
+        font-family: monospace;
+        letter-spacing: 0.5px;
+    }
+
+    .tl-contract-pill {
+        font-size: 0.72rem;
+        font-weight: 700;
+        background: #f1f5f9;
+        border: 1px solid #cbd5e1;
+        color: #475569;
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-family: monospace;
+    }
+
+    /* Col 2: Customer & Progress */
+    .tl-card-col-customer {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 0 10px;
+    }
+
+    .tl-customer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .tl-customer-name {
+        font-size: 0.92rem;
+        font-weight: 800;
+        color: #1e293b;
+    }
+
+    .tl-btn-whatsapp {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        color: #047857;
+        font-size: 0.76rem;
+        font-weight: 700;
+        padding: 3px 9px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .tl-btn-whatsapp:hover {
+        background: #10b981;
+        color: #ffffff;
+        border-color: #059669;
+    }
+
+    .tl-dates-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.82rem;
+        color: #64748b;
+        flex-wrap: wrap;
+    }
+
+    .tl-open-badge {
+        background: #e0f2fe;
+        color: #0284c7;
+        border: 1px solid #bae6fd;
+        font-size: 0.74rem;
+        font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 6px;
+    }
+
+    .tl-progress-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .tl-progress-bar {
+        flex: 1;
+        height: 7px;
+        background: #e2e8f0;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .tl-progress-fill {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.3s ease;
+    }
+
+    .tl-progress-fill.fill-active {
+        background: linear-gradient(90deg, #0284c7, #38bdf8);
+    }
+
+    .tl-progress-fill.fill-overdue {
+        background: #ef4444;
+    }
+
+    .tl-progress-label {
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: #64748b;
+        white-space: nowrap;
+    }
+
+    /* Col 3: Countdown Box */
+    .tl-card-col-timer {
+        display: flex;
+        justify-content: center;
+    }
+
+    .tl-countdown-box {
+        width: 100%;
+        border-radius: 12px;
+        padding: 10px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        text-align: center;
+    }
+
+    .countdown-active {
+        background: #f0fdf4;
+        border: 1.5px solid #86efac;
+    }
+
+    .countdown-due-today {
+        background: #fffbeb;
+        border: 1.5px solid #fde68a;
+    }
+
+    .countdown-overdue {
+        background: #fef2f2;
+        border: 1.5px solid #fca5a5;
+        animation: overdueGlow 1.8s infinite;
+    }
+
+    .countdown-open {
+        background: #f0f9ff;
+        border: 1.5px solid #bae6fd;
+    }
+
+    @@keyframes overdueGlow {
+        0%, 100% { box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+        50% { box-shadow: 0 0 12px rgba(239, 68, 68, 0.25); }
+    }
+
+    .tl-timer-head {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-size: 0.74rem;
+        font-weight: 800;
+        color: #1e293b;
+    }
+
+    .tl-timer-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+    }
+
+    .tl-digits-strip {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 5px;
+        direction: ltr;
+    }
+
+    .tl-digit-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .tl-d-num {
+        font-size: 1.25rem;
+        font-weight: 900;
+        color: #15803d;
+        font-family: monospace;
+        line-height: 1;
+    }
+
+    .cell-danger .tl-d-num {
+        color: #dc2626;
+    }
+
+    .tl-d-lbl {
+        font-size: 0.62rem;
+        font-weight: 800;
+        color: #64748b;
+        margin-top: 1px;
+    }
+
+    .cell-danger .tl-d-lbl {
+        color: #b91c1c;
+    }
+
+    .tl-d-sep {
+        font-size: 1.1rem;
+        font-weight: 900;
+        color: #cbd5e1;
+        line-height: 1;
+    }
+
+    .tl-sec-pulse {
+        animation: secPulse 1s infinite;
+    }
+
+    .tl-sec-pulse-red {
+        animation: secPulse 0.8s infinite;
+    }
+
+    @@keyframes secPulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.45; }
+    }
+
+    .tl-timer-sub {
+        font-size: 0.72rem;
+        color: #64748b;
+    }
+
+    .tl-timer-main-text {
+        font-size: 1.15rem;
+        font-weight: 900;
+    }
+
+    /* Col 4: Action Buttons */
+    .tl-card-col-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .tl-btn-action-return {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border: none;
+        border-radius: 8px;
+        padding: 8px 10px;
+        color: #ffffff;
+        font-size: 0.82rem;
+        font-weight: 800;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+        transition: all 0.15s ease;
+    }
+
+    .tl-btn-action-return:hover {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(16, 185, 129, 0.4);
+    }
+
+    .tl-btn-action-extend {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+        border: none;
+        border-radius: 8px;
+        padding: 7px 10px;
+        color: #ffffff;
+        font-size: 0.78rem;
+        font-weight: 800;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        box-shadow: 0 2px 6px rgba(2, 132, 199, 0.25);
+        transition: all 0.15s ease;
+    }
+
+    .tl-btn-action-extend:hover {
+        background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(2, 132, 199, 0.35);
+    }
+
+    .tl-btn-action-manage {
+        background: #f1f5f9;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 6px 10px;
+        color: #475569;
+        font-size: 0.76rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        transition: all 0.15s ease;
+    }
+
+    .tl-btn-action-manage:hover {
+        background: #e2e8f0;
+        color: #0f172a;
+    }
+
+    @@media (max-width: 1024px) {
+        .timeline-smart-card {
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+        .axis-header-row, .timeline-contract-row {
+            grid-template-columns: 180px 180px 1fr 90px;
+        }
+    }
+
+    /* Timeline Axis Grid */
+    .timeline-axis-container {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow-x: auto;
+    }
+
+    .axis-header-row {
+        display: grid;
+        grid-template-columns: 240px 220px 1fr 110px;
+        align-items: center;
+        gap: 16px;
+        padding: 6px 14px;
+        font-size: 0.78rem;
+        font-weight: 800;
+        color: var(--text-muted);
+        border-bottom: 2px solid var(--border-color);
+    }
+
+    .axis-col-vehicle {
+        text-align: right;
+    }
+
+    .axis-col-counter {
+        text-align: center;
+    }
+
+    .axis-col-track {
+        position: relative;
+    }
+
+    .axis-col-actions {
+        text-align: center;
+    }
+
+    .axis-days-grid {
+        display: grid;
+        gap: 4px;
+    }
+
+    .axis-day-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 2px;
+        border-radius: 6px;
+        background: #faf8f5;
+        border: 1px solid var(--border-subtle);
+        position: relative;
+    }
+
+    .axis-day-cell.cell-today {
+        background: #e0f2fe;
+        border-color: #38bdf8;
+    }
+
+    .axis-day-name {
+        font-size: 0.75rem;
+        font-weight: 800;
+        color: var(--text-main);
+    }
+
+    .axis-day-date {
+        font-size: 0.68rem;
+        color: var(--text-muted);
+        font-family: monospace;
+    }
+
+    .today-marker-tag {
+        position: absolute;
+        top: -8px;
+        background: #0284c7;
+        color: #ffffff;
+        font-size: 0.6rem;
+        font-weight: 800;
+        padding: 0 5px;
+        border-radius: 6px;
+    }
+
+    /* Timeline Contract Rows */
+    .timeline-rows-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .timeline-contract-row {
+        display: grid;
+        grid-template-columns: 240px 220px 1fr 110px;
+        align-items: center;
+        gap: 16px;
+        background: #ffffff;
+        border: 1.5px solid var(--border-color);
+        border-radius: 14px;
+        padding: 12px 14px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+        transition: all 0.2s ease;
+    }
+
+    .timeline-contract-row:hover {
+        border-color: var(--accent-gold);
+        box-shadow: 0 6px 16px rgba(197, 155, 39, 0.12);
+    }
+
+    .timeline-contract-row.row-overdue {
+        border-color: #fca5a5;
+        background: #fff8f8;
+    }
+
+    /* Col 1: Vehicle & Customer */
+    .col-vehicle-info {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .vehicle-thumb-box {
+        width: 58px;
+        height: 42px;
+        background: #f8f5ee;
+        border-radius: 8px;
+        border: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    .vehicle-img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .vehicle-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        overflow: hidden;
+    }
+
+    .vehicle-title {
+        font-size: 0.88rem;
+        font-weight: 800;
+        color: var(--text-main);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .vehicle-sub-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .plate-number-badge {
+        font-size: 0.72rem;
+        font-weight: 800;
+        background: #f1f5f9;
+        color: #0369a1;
+        padding: 1px 6px;
+        border-radius: 6px;
+        font-family: monospace;
+    }
+
+    .contract-code-badge {
+        font-size: 0.68rem;
+        font-weight: 700;
+        background: #fdfaf4;
+        border: 1px solid var(--border-color);
+        color: var(--text-muted);
+        padding: 1px 5px;
+        border-radius: 6px;
+    }
+
+    .customer-info-line {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.75rem;
+        color: #475569;
+    }
+
+    .customer-name {
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 110px;
+    }
+
+    .btn-whatsapp-mini {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 0.85rem;
+        padding: 0;
+        transition: transform 0.15s ease;
+    }
+
+    .btn-whatsapp-mini:hover {
+        transform: scale(1.2);
+    }
+
+    /* Col 2: Live Countdown Card */
+    .col-countdown-timer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .countdown-card {
+        width: 100%;
+        border-radius: 10px;
+        padding: 8px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .active-countdown {
+        background: #f0fdf4;
+        border: 1.5px solid #86efac;
+    }
+
+    .overdue-countdown {
+        background: #fef2f2;
+        border: 1.5px solid #fca5a5;
+        animation: borderPulse 1.8s infinite;
+    }
+
+    @@keyframes borderPulse {
+        0%, 100% { box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+        50% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.25); }
+    }
+
+    .countdown-header-line {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #166534;
+    }
+
+    .timer-label-danger {
+        color: #991b1b;
+        font-weight: 800;
+    }
+
+    .timer-dot-green {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #16a34a;
+        box-shadow: 0 0 6px #16a34a;
+        animation: dotPulse 1s infinite;
+    }
+
+    .timer-dot-red {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #dc2626;
+        box-shadow: 0 0 6px #dc2626;
+        animation: dotPulse 0.8s infinite;
+    }
+
+    .countdown-digits-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 4px;
+        direction: ltr; /* Numerics left-to-right for clean reading */
+    }
+
+    .digit-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .digit-num {
+        font-size: 1.15rem;
+        font-weight: 900;
+        color: #15803d;
+        font-family: monospace;
+        line-height: 1;
+    }
+
+    .digit-danger .digit-num {
+        color: #b91c1c;
+    }
+
+    .digit-unit {
+        font-size: 0.6rem;
+        font-weight: 800;
+        color: #166534;
+        margin-top: 1px;
+    }
+
+    .digit-danger .digit-unit {
+        color: #991b1b;
+    }
+
+    .digit-sep {
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: #86efac;
+        line-height: 1;
+    }
+
+    .overdue-digits .digit-sep {
+        color: #fca5a5;
+    }
+
+    .sec-pulse {
+        color: #047857;
+        font-weight: 900;
+    }
+
+    .sec-pulse-danger {
+        color: #ef4444;
+        font-weight: 900;
+    }
+
+    .countdown-footer-line {
+        font-size: 0.68rem;
+        color: #475569;
+        text-align: center;
+        margin-top: 1px;
+    }
+
+    .overdue-footer {
+        color: #b91c1c;
+        font-weight: 700;
+    }
+
+    /* Col 3: Mathematical Gantt Track Lane */
+    .col-timeline-track {
+        position: relative;
+        height: 48px;
+        background: #faf8f5;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+    }
+
+    .track-background-grid {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: grid;
+        gap: 4px;
+        pointer-events: none;
+    }
+
+    .track-grid-cell {
+        border-left: 1px dashed rgba(0, 0, 0, 0.05);
+    }
+
+    .track-grid-cell.cell-today {
+        background: rgba(224, 242, 254, 0.35);
+    }
+
+    /* Current Time Marker Needle */
+    .current-time-marker {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #ef4444;
+        z-index: 15;
+        box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+        pointer-events: none;
+    }
+
+    .marker-needle {
+        width: 2px;
+        height: 100%;
+        background: #ef4444;
+    }
+
+    .marker-label {
+        position: absolute;
+        top: 2px;
+        right: -32px;
+        background: #ef4444;
+        color: #ffffff;
+        font-size: 0.6rem;
+        font-weight: 800;
+        padding: 1px 4px;
+        border-radius: 4px;
+        white-space: nowrap;
+    }
+
+    /* Contract Bar */
+    .gantt-contract-bar {
+        position: absolute;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        z-index: 10;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+        overflow: hidden;
+        transition: all 0.25s ease;
+        cursor: pointer;
+    }
+
+    .gantt-contract-bar.bar-active {
+        background: linear-gradient(90deg, #0284c7 0%, #0ea5e9 100%);
+        border: 1px solid #0369a1;
+        color: #ffffff;
+    }
+
+    .gantt-contract-bar.bar-overdue {
+        background: repeating-linear-gradient(
+            45deg,
+            #ef4444,
+            #ef4444 10px,
+            #dc2626 10px,
+            #dc2626 20px
+        );
+        border: 1px solid #b91c1c;
+        color: #ffffff;
+        box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+    }
+
+    .bar-progress-fill {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.18);
+        pointer-events: none;
+    }
+
+    .bar-content-label {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.75rem;
+        font-weight: 800;
+        white-space: nowrap;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+
+    .bar-overdue-tag {
+        background: #fee2e2;
+        color: #991b1b;
+        font-size: 0.65rem;
+        padding: 1px 6px;
+        border-radius: 6px;
+        text-shadow: none;
+    }
+
+    /* Col 4: Action Buttons */
+    .col-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .btn-extend-action {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        background: #fdfaf4;
+        border: 1px solid var(--accent-gold);
+        border-radius: 8px;
+        padding: 5px 8px;
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: var(--wood-walnut);
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .btn-extend-action:hover {
+        background: var(--accent-gold);
+        color: #ffffff;
+    }
+
+    .btn-manage-action {
+        background: #f1f5f9;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 4px 8px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #475569;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .btn-manage-action:hover {
+        background: #e2e8f0;
+        color: #0f172a;
+    }
+
+    /* Empty Card */
+    .timeline-empty-card {
+        padding: 38px 20px;
+        text-align: center;
+        background: #fdfbf7;
+        border: 1.5px dashed var(--border-color);
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .empty-calendar-icon {
+        font-size: 2.2rem;
+    }
+
+    .timeline-empty-card h4 {
+        margin: 0;
+        font-size: 1.05rem;
+        color: var(--text-main);
+    }
+
+    .timeline-empty-card p {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        max-width: 420px;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public List<Contract>? Contracts { get; set; }
+
+    [Parameter]
+    public EventCallback OnContractUpdated { get; set; }
+
+    private List<Contract>? _loadedContracts;
+    private List<Contract> EffectiveContracts => Contracts ?? _loadedContracts ?? new();
+
+    private string _viewMode = "cards";
+    private int OverdueCount => EffectiveContracts.Count(c => c.ExpectedReturnDateTime < _currentTime && !c.IsOpenEnded);
+    private int DueTodayCount => EffectiveContracts.Count(c => c.ExpectedReturnDateTime.Date == DateTime.Today && c.ExpectedReturnDateTime >= _currentTime && !c.IsOpenEnded);
+    private int OnTrackCount => EffectiveContracts.Count(c => (c.ExpectedReturnDateTime.Date > DateTime.Today || c.IsOpenEnded) && !(c.ExpectedReturnDateTime < _currentTime && !c.IsOpenEnded));
+
+    private DateTime _currentTime = DateTime.Now;
+    private System.Threading.Timer? _countdownTimer;
+    private int _timelineDays = 7;
+    private Contract? _selectedContractForExtend;
+
+    private List<AxisDayItem> _axisDays = new();
+    private DateTime _windowStart;
+    private DateTime _windowEnd;
+    private double _nowMarkerPercent = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        RentalService.OnContractsDataChanged += HandleContractsDataChanged;
+        UpdateAxis();
+
+        if (Contracts == null)
+        {
+            await LoadContractsInternalAsync();
+        }
+
+        // High precision live tick every 1000ms (1 second) so the countdown decrements smoothly
+        _countdownTimer = new System.Threading.Timer(async _ =>
+        {
+            _currentTime = DateTime.Now;
+            UpdateNowMarker();
+            await InvokeAsync(StateHasChanged);
+        }, null, 1000, 1000);
+    }
+
+    private async void HandleContractsDataChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            if (Contracts == null)
+            {
+                await LoadContractsInternalAsync();
+            }
+            UpdateAxis();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadContractsInternalAsync()
+    {
+        try
+        {
+            _loadedContracts = await RentalService.GetContractsAsync(ContractStatus.Active);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading contracts for timeline: {ex.Message}");
+            _loadedContracts = new();
+        }
+    }
+
+    public void Dispose()
+    {
+        RentalService.OnContractsDataChanged -= HandleContractsDataChanged;
+        _countdownTimer?.Dispose();
+    }
+
+    private void SetScale(int days)
+    {
+        _timelineDays = days;
+        UpdateAxis();
+        StateHasChanged();
+    }
+
+    private void UpdateAxis()
+    {
+        _axisDays.Clear();
+        // Window starts yesterday to show immediate past and current continuity
+        _windowStart = DateTime.Today.AddDays(-1);
+        _windowEnd = _windowStart.AddDays(_timelineDays);
+
+        var today = DateTime.Today;
+        for (int i = 0; i < _timelineDays; i++)
+        {
+            var date = _windowStart.AddDays(i);
+            string dayName = date switch
+            {
+                var d when d == today.AddDays(-1) => "أمس",
+                var d when d == today => "اليوم",
+                var d when d == today.AddDays(1) => "غداً",
+                _ => GetArabicDayName(date.DayOfWeek)
+            };
+
+            _axisDays.Add(new AxisDayItem
+            {
+                Date = date,
+                DayName = dayName,
+                DateText = date.ToString("MM/dd"),
+                IsToday = date == today
+            });
+        }
+
+        UpdateNowMarker();
+    }
+
+    private void UpdateNowMarker()
+    {
+        var totalHours = (_windowEnd - _windowStart).TotalHours;
+        if (totalHours <= 0) return;
+
+        var elapsedHours = (_currentTime - _windowStart).TotalHours;
+        _nowMarkerPercent = Math.Clamp((elapsedHours / totalHours) * 100.0, 0, 100);
+    }
+
+    private TrackMetrics CalculateTrackMetrics(Contract c)
+    {
+        var totalHours = (_windowEnd - _windowStart).TotalHours;
+        if (totalHours <= 0) return new TrackMetrics { RightPercent = 0, WidthPercent = 10 };
+
+        var startOffsetHours = (c.StartDateTime - _windowStart).TotalHours;
+        var endOffsetHours = (c.ExpectedReturnDateTime - _windowStart).TotalHours;
+
+        // In RTL: Right = start offset percentage, Width = duration percentage
+        var clampedStart = Math.Max(0, startOffsetHours);
+        var clampedEnd = Math.Min(totalHours, endOffsetHours);
+
+        if (clampedEnd < clampedStart) clampedEnd = clampedStart + 2;
+
+        var rightPercent = Math.Clamp((clampedStart / totalHours) * 100.0, 0, 95);
+        var widthPercent = Math.Clamp(((clampedEnd - clampedStart) / totalHours) * 100.0, 4, 100 - rightPercent);
+
+        return new TrackMetrics
+        {
+            RightPercent = rightPercent,
+            WidthPercent = widthPercent
+        };
+    }
+
+    private string GetArabicDayName(DayOfWeek dow) => dow switch
+    {
+        DayOfWeek.Saturday => "السبت",
+        DayOfWeek.Sunday => "الأحد",
+        DayOfWeek.Monday => "الاثنين",
+        DayOfWeek.Tuesday => "الثلاثاء",
+        DayOfWeek.Wednesday => "الأربعاء",
+        DayOfWeek.Thursday => "الخميس",
+        DayOfWeek.Friday => "الجمعة",
+        _ => ""
+    };
+
+    private void OpenExtendModal(Contract c)
+    {
+        _selectedContractForExtend = c;
+    }
+
+    private async Task HandleContractExtended()
+    {
+        _selectedContractForExtend = null;
+        if (Contracts == null)
+        {
+            await LoadContractsInternalAsync();
+        }
+        if (OnContractUpdated.HasDelegate)
+        {
+            await OnContractUpdated.InvokeAsync();
+        }
+        StateHasChanged();
+    }
+
+    private void SendWhatsApp(Contract c)
+    {
+        try
+        {
+            var phone = c.Customer?.PrimaryPhone;
+            if (string.IsNullOrEmpty(phone)) return;
+
+            var diff = c.ExpectedReturnDateTime - DateTime.Now;
+            string timeStatus = diff.TotalSeconds > 0
+                ? $"متبقي على موعد التسليم {((int)diff.TotalHours)} ساعة و {diff.Minutes} دقيقة (بتاريخ {c.ExpectedReturnDateTime:yyyy/MM/dd hh:mm tt})."
+                : $"نود إعلامكم بأن موعد التسليم الرسمي قد انقضى منذ {Math.Abs((int)diff.TotalHours)} ساعة. يرجى مراجعة المكتب فوراً.";
+
+            var msg = $"✦ *شركة التـاج لتأجيـر السيـارات* (TAJ SYSTEM) ✦\n" +
+                      $"━━━━━━━━━━━━━━━━━━━━━\n" +
+                      $"مرحباً بك أخي الكريم: *{c.Customer?.FullName}*\n" +
+                      $"نود تذكيركم بموعد عقد تأجير المركبة: *{c.Vehicle?.Brand} {c.Vehicle?.Model}* (لوحة: *{c.Vehicle?.PlateNumber}*)\n" +
+                      $"رقم العقد: *{c.ContractNumber}*\n\n" +
+                      $"▪ {timeStatus}\n" +
+                      $"━━━━━━━━━━━━━━━━━━━━━\n" +
+                      $"☎ *خدمة العملاء:* 0566655550 | 0566009003";
+
+            WhatsAppHelper.OpenWhatsApp(phone, "970", msg);
+        }
+        catch { }
+    }
+
+    private class AxisDayItem
+    {
+        public DateTime Date { get; set; }
+        public string DayName { get; set; } = "";
+        public string DateText { get; set; } = "";
+        public bool IsToday { get; set; }
+    }
+
+    private class TrackMetrics
+    {
+        public double RightPercent { get; set; }
+        public double WidthPercent { get; set; }
+    }
+}

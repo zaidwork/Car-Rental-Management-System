@@ -1,0 +1,259 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Interfaces
+@inject IJSRuntime JSRuntime
+@inject IRentalSystemService RentalService
+
+@if (Customer != null)
+{
+<div class="modal-overlay">
+    <div class="modal-card" style="max-width: 880px;">
+        <div class="modal-header">
+            <div class="modal-title">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-blue)" stroke-width="2">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                <span>كشف حساب تفصيلي للعميل (@Customer.FullName)</span>
+            </div>
+            <button class="btn-close-modal" @onclick="OnClose">×</button>
+        </div>
+
+        <!-- Company Switcher Bar (Non-Printable) -->
+        <div class="company-switcher-bar no-print" style="display: flex; gap: 12px; align-items: center; padding: 10px 20px; background: #e8e1d2; border-bottom: 1.5px solid var(--border-color); flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 0.88rem; color: #451a03;">
+                <span>👑 ترويسة الكشف المالي:</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button type="button" 
+                        class="filter-pill @(_selectedCompany == "samara" ? "active" : "")" 
+                        style="cursor: pointer; font-weight: bold; border: 1.5px solid @(_selectedCompany == "samara" ? "#b45309" : "#cbd5e1");"
+                        @onclick='() => _selectedCompany = "samara"'>
+                    🏢 شركة سمارة (مشتغل: 562171389)
+                </button>
+                <button type="button" 
+                        class="filter-pill @(_selectedCompany == "altaj" ? "active" : "")" 
+                        style="cursor: pointer; font-weight: bold; border: 1.5px solid @(_selectedCompany == "altaj" ? "#b45309" : "#cbd5e1");"
+                        @onclick='() => _selectedCompany = "altaj"'>
+                    👑 شركة التاج (مشتغل: 562514273)
+                </button>
+            </div>
+        </div>
+
+        <div class="modal-body" style="background: #e5ded0; padding: 20px; flex: 1 1 auto; min-height: 0; overflow-y: auto;">
+            @if (_statement != null)
+            {
+                <div class="printable-document official-contract-sheet" id="printableStatementArea" style="background: #ffffff; color: #000000; padding: 25px 28px; border-radius: 4px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); font-family: 'Cairo', sans-serif; line-height: 1.6; border: 2px solid #000000;">
+                    <!-- Header -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000000; padding-bottom: 14px; margin-bottom: 20px;">
+                        <div style="text-align: right;">
+                            <h2 style="font-size: 1.3rem; font-weight: 900; margin: 0; color: #000000;">@ActiveCompanyNameAr</h2>
+                            <div style="font-size: 0.82rem; font-weight: bold; color: #1e293b;">لتأجير السيارات السياحية</div>
+                            <div style="font-size: 0.8rem; color: #475569;">طوباس - قرب الصحة الجديدة</div>
+                            <div style="font-size: 0.8rem; color: #475569;">مشتغل مرخص رقم: @ActiveCompanyDealerNo</div>
+                            <div style="font-size: 0.8rem; color: #475569; font-family: monospace;">هاتف: 05 666 5555 0 | 0566 009 003</div>
+                        </div>
+                        <div style="text-align: center;">
+                            @if (_selectedCompany == "altaj")
+                            {
+                                <img src="images/logo.png" alt="TAJ" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 4px;" />
+                            }
+                            <div style="border: 2px solid #000000; padding: 6px 24px; border-radius: 6px; font-weight: 900; font-size: 1.25rem; background: #ffffff; color: #000000;">
+                                كشف حساب عميل مالي
+                            </div>
+                            <span style="font-size: 0.8rem; color: #64748b; display: block; margin-top: 4px;">Customer Statement of Account</span>
+                        </div>
+                        <div style="text-align: left; font-size: 0.88rem;">
+                            <div><strong>تاريخ الإصدار:</strong> <span style="font-family: monospace;">@_statement.GeneratedAt.ToString("yyyy/MM/dd")</span></div>
+                            <div><strong>الوقت:</strong> <span style="font-family: monospace;">@_statement.GeneratedAt.ToString("hh:mm tt")</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Customer Info Box -->
+                    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 18px; margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9rem;">
+                        <div><strong>اسم العميل:</strong> @_statement.Customer.FullName</div>
+                        <div><strong>رقم الهوية / الجواز:</strong> @_statement.Customer.NationalIdOrPassport</div>
+                        <div><strong>رقم الجوال:</strong> @_statement.Customer.PrimaryPhone</div>
+                        <div><strong>رقم الرخصة:</strong> @_statement.Customer.LicenseNumber (تنتهي: @_statement.Customer.LicenseExpiryDate.ToString("yyyy/MM/dd"))</div>
+                    </div>
+
+                    <!-- Financial Summary Tiles -->
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; text-align: center;">
+                        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px;">
+                            <div style="font-size: 0.82rem; color: #64748b;">إجمالي الالتزامات والعقود</div>
+                            <div style="font-size: 1.2rem; font-weight: 800; color: #0f172a;">@_statement.TotalAgreed.ToString("N0") ₪</div>
+                        </div>
+                        <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 10px;">
+                            <div style="font-size: 0.82rem; color: #166534;">إجمالي المسدد والمقبوض</div>
+                            <div style="font-size: 1.2rem; font-weight: 800; color: #16a34a;">@_statement.TotalPaid.ToString("N0") ₪</div>
+                        </div>
+                        <div style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; padding: 10px;">
+                            <div style="font-size: 0.82rem; color: #991b1b;">صافي المتبقي بذمة العميل</div>
+                            <div style="font-size: 1.25rem; font-weight: 900; color: #dc2626;">@_statement.TotalRemainingDebts.ToString("N0") ₪</div>
+                        </div>
+                    </div>
+
+                    <!-- Section 1: Contracts -->
+                    <h3 style="font-size: 0.95rem; font-weight: 800; border-bottom: 1.5px solid #0f172a; padding-bottom: 4px; margin-bottom: 8px;">
+                        أولاً: سجل عقود التأجير
+                    </h3>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.84rem; margin-bottom: 20px; text-align: center;">
+                        <thead>
+                            <tr style="background: #e2e8f0; font-weight: bold;">
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">رقم العقد</th>
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">السيارة واللوحة</th>
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">الفترة</th>
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">الإجمالي</th>
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">المدفوع</th>
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">المتبقي</th>
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_statement.Contracts.Any())
+                            {
+                                @foreach (var c in _statement.Contracts)
+                                {
+                                    var contractTotal = c.IsOpenEnded && c.Status == ContractStatus.Active ? c.OpenRentalAccruedAmount : c.TotalAgreedAmount;
+                                    var contractRemaining = c.IsOpenEnded && c.Status == ContractStatus.Active ? c.OpenRentalCurrentDue : c.RemainingAmount;
+                                    <tr>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-family: monospace; font-weight: bold;">@c.ContractNumber</td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0;">@c.Vehicle?.Brand @c.Vehicle?.Model (@c.Vehicle?.PlateNumber)</td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0;">
+                                            @(c.IsOpenEnded && c.Status == ContractStatus.Active 
+                                                ? $"{c.StartDateTime:yyyy/MM/dd} - مفتوح ({c.OpenRentalDays} يوم)" 
+                                                : $"{c.StartDateTime:yyyy/MM/dd} - {c.ExpectedReturnDateTime:yyyy/MM/dd}")
+                                        </td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-weight: bold;">
+                                            @contractTotal.ToString("N0") ₪
+                                            @if (c.IsOpenEnded && c.Status == ContractStatus.Active)
+                                            {
+                                                <span style="font-size: 0.72rem; color: #64748b; display: block;">(مستحق لليوم)</span>
+                                            }
+                                        </td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; color: #16a34a; font-weight: bold;">@c.PaidAmount.ToString("N0") ₪</td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; color: @(contractRemaining > 0 ? "#dc2626" : "#000000"); font-weight: bold;">@contractRemaining.ToString("N0") ₪</td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0;">@(c.Status == ContractStatus.Active ? (c.IsOpenEnded ? "نشط (مفتوح)" : "نشط") : (c.Status == ContractStatus.Cancelled ? "ملغي" : "مغلق"))</td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="7" style="padding: 10px; color: #64748b;">لا توجد عقود تأجير مسجلة</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    <!-- Section 2: Payments History -->
+                    <h3 style="font-size: 0.95rem; font-weight: 800; border-bottom: 1.5px solid #0f172a; padding-bottom: 4px; margin-bottom: 8px;">
+                        ثانياً: سجل الدفعات والمقبوضات
+                    </h3>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.84rem; margin-bottom: 20px; text-align: center;">
+                        <thead>
+                            <tr style="background: #e2e8f0; font-weight: bold;">
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">رقم السند</th>
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">التاريخ</th>
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">المبلغ</th>
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">طريقة الدفع</th>
+                                <th style="padding: 6px; border: 1px solid #cbd5e1;">البيان</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_statement.Transactions.Any())
+                            {
+                                @foreach (var t in _statement.Transactions)
+                                {
+                                    <tr>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-family: monospace; font-weight: bold;">@t.ReceiptNumber</td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0;">@t.TransactionDateTime.ToString("yyyy/MM/dd HH:mm")</td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0; font-weight: bold; color: #16a34a;">@t.Amount.ToString("N0") ₪</td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0;">@t.PaymentMethod</td>
+                                        <td style="padding: 6px; border: 1px solid #e2e8f0;">@t.Description</td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="5" style="padding: 10px; color: #64748b;">لا توجد حركات سداد مالية</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                </div>
+            }
+            else
+            {
+                <div style="text-align: center; padding: 40px;">جاري تحميل كشف الحساب...</div>
+            }
+        </div>
+
+        <div class="modal-footer">
+            <button class="filter-pill" @onclick="OnClose">إغلاق</button>
+            <button class="btn-primary-action" @onclick="PrintStatement">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                <span>طباعة كشف الحساب فورياً (A4 Print)</span>
+            </button>
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    [Parameter] public Customer? Customer { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private CustomerStatementDto? _statement;
+    private CompanyProfile? _company;
+    private string _selectedCompany = "altaj";
+
+    private string ActiveCompanyNameAr => _selectedCompany == "samara" 
+        ? "شركة سمارة" 
+        : "شركة التاج";
+
+    private string ActiveCompanyDealerNo => _selectedCompany == "samara" 
+        ? "562171389" 
+        : "562514273";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _company = await RentalService.GetCompanyProfileAsync();
+            if (_company != null && !string.IsNullOrWhiteSpace(_company.CompanyName))
+            {
+                if (_company.CompanyName.Contains("تاج") || _company.CompanyName.ToLower().Contains("taj"))
+                {
+                    _selectedCompany = "altaj";
+                }
+            }
+        }
+        catch { }
+
+        if (Customer != null)
+        {
+            _statement = await RentalService.GetCustomerStatementAsync(Customer.Id);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Customer != null && (_statement == null || _statement.Customer?.Id != Customer.Id))
+        {
+            _statement = await RentalService.GetCustomerStatementAsync(Customer.Id);
+        }
+    }
+
+    private async Task PrintStatement()
+    {
+        await JSRuntime.InvokeVoidAsync("window.print");
+    }
+}

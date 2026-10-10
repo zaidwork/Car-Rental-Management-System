@@ -1,0 +1,845 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Helpers
+@inject IJSRuntime JS
+
+<div class="vehicle-condition-diagram-wrapper" style="display: flex; flex-direction: column; gap: 14px;">
+    <!-- Views Bar & Drawing Tools Toolbar -->
+    <div style="background: #ffffff; border: 1.5px solid var(--border-color); border-radius: 12px; padding: 12px 16px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
+        <!-- View Selector Tabs -->
+        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+            <span style="font-size: 0.82rem; font-weight: 800; color: var(--text-muted); margin-left: 4px;">زاوية العرض:</span>
+            <button type="button" class="vcd-tab-btn @(_activeView == "all" ? "active" : "")" @onclick="@(() => SetView("all"))">
+                <span>🚗 المخطط الشامل (كامل الزوايا)</span>
+                @if (GetMarksCountForView("all") > 0)
+                {
+                    <span class="vcd-badge">@GetMarksCountForView("all")</span>
+                }
+            </button>
+            <button type="button" class="vcd-tab-btn @(_activeView == "front" ? "active" : "")" @onclick="@(() => SetView("front"))">
+                <span>🚘 أمامي</span>
+                @if (GetMarksCountForView("front") > 0)
+                {
+                    <span class="vcd-badge">@GetMarksCountForView("front")</span>
+                }
+            </button>
+            <button type="button" class="vcd-tab-btn @(_activeView == "side" ? "active" : "")" @onclick="@(() => SetView("side"))">
+                <span>🚙 جانبي</span>
+                @if (GetMarksCountForView("side") > 0)
+                {
+                    <span class="vcd-badge">@GetMarksCountForView("side")</span>
+                }
+            </button>
+            <button type="button" class="vcd-tab-btn @(_activeView == "rear" ? "active" : "")" @onclick="@(() => SetView("rear"))">
+                <span>🚗 خلفي</span>
+                @if (GetMarksCountForView("rear") > 0)
+                {
+                    <span class="vcd-badge">@GetMarksCountForView("rear")</span>
+                }
+            </button>
+            <button type="button" class="vcd-tab-btn @(_activeView == "persp_front" ? "active" : "")" @onclick="@(() => SetView("persp_front"))">
+                <span>🏎️ أمامي مجسم</span>
+                @if (GetMarksCountForView("persp_front") > 0)
+                {
+                    <span class="vcd-badge">@GetMarksCountForView("persp_front")</span>
+                }
+            </button>
+            <button type="button" class="vcd-tab-btn @(_activeView == "persp_rear" ? "active" : "")" @onclick="@(() => SetView("persp_rear"))">
+                <span>🏎️ خلفي مجسم</span>
+                @if (GetMarksCountForView("persp_rear") > 0)
+                {
+                    <span class="vcd-badge">@GetMarksCountForView("persp_rear")</span>
+                }
+            </button>
+        </div>
+
+        @if (!ReadOnly)
+        {
+            <!-- Tool & Damage Type Picker -->
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <!-- Shape Picker -->
+                <div style="display: flex; background: #f1f5f9; border-radius: 8px; padding: 3px; border: 1px solid #cbd5e1; gap: 4px;">
+                    <button type="button" class="vcd-tool-btn @(_selectedShape == "circle" ? "active" : "")" title="دائرة تحديد" @onclick='() => _selectedShape = "circle"'>
+                        ⭕ دائرة
+                    </button>
+                    <button type="button" class="vcd-tool-btn @(_selectedShape == "pin" ? "active" : "")" title="دبوس نقطي" @onclick='() => _selectedShape = "pin"'>
+                        📍 علامة
+                    </button>
+                    <button type="button" class="vcd-tool-btn @(_selectedShape == "cross" ? "active" : "")" title="إشارة صدمة X" @onclick='() => _selectedShape = "cross"'>
+                        ❌ صدمة
+                    </button>
+                </div>
+
+                <!-- Damage Type Dropdown / Pills -->
+                <div style="display: flex; gap: 4px; align-items: center;">
+                    @foreach (var type in _damageTypes)
+                    {
+                        <button type="button" class="vcd-type-pill @(_selectedType == type.Name ? "selected" : "")" 
+                                style="border-color: @type.Color; --accent: @type.Color;"
+                                @onclick="() => SelectDamageType(type)">
+                            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: @type.Color;"></span>
+                            <span>@type.Name</span>
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Instructions banner -->
+    @if (!ReadOnly)
+    {
+        <div style="background: #fdfaf4; border: 1px dashed var(--accent-gold); border-radius: 8px; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; color: #78350f;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span>👆</span>
+                <strong>انقر بالماوس مباشرة على أي جزء من هيكل السيارة لوضع علامة الخدش أو الضربة، أو انقر على علامة موجودة لعرض تفاصيلها أو إزالتها.</strong>
+            </div>
+            <div style="font-weight: bold; color: var(--primary-blue);">
+                النوع النشط: <span style="color: @_selectedTypeColor;">● @_selectedType</span> (@_selectedShapeText)
+            </div>
+        </div>
+    }
+
+    <!-- Main Canvas / Blueprint View -->
+    <div style="position: relative; background: #ffffff; border: 2px solid var(--border-color); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.04); display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; padding: 10px;">
+        
+        <!-- Interactive Stage tightly wrapping the image with 100% exact aspect ratio -->
+        <div style="position: relative; display: block; line-height: 0; width: 100%; max-width: @CurrentViewMaxWidth; aspect-ratio: @CurrentViewAspectRatio; margin: 0 auto; text-align: center;">
+
+            <!-- Vehicle Base Image -->
+            <img src="@CurrentViewImage" alt="Vehicle Blueprint" 
+                 style="display: block; width: 100%; height: 100%; pointer-events: none; border-radius: 6px;" />
+
+            <!-- Interactive Click & Marks Layer overlaying image with 100% exact same dimensions -->
+            <div id="@_containerId" 
+                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: @(ReadOnly ? "default" : "crosshair");"
+                 @onclick="HandleDiagramClick">
+
+                <!-- Helpful Angle Labels when in 'all' view -->
+                @if (_activeView == "all")
+                {
+                    <div style="position: absolute; top: 2%; left: 1%; background: rgba(15,23,42,0.75); color: #fff; font-size: 0.72rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; line-height: 1.2; pointer-events: none;">🚘 أمامي</div>
+                    <div style="position: absolute; top: 2%; left: 45%; transform: translateX(-50%); background: rgba(15,23,42,0.75); color: #fff; font-size: 0.72rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; line-height: 1.2; pointer-events: none;">🚙 جانبي</div>
+                    <div style="position: absolute; top: 2%; right: 1%; background: rgba(15,23,42,0.75); color: #fff; font-size: 0.72rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; line-height: 1.2; pointer-events: none;">🚗 خلفي</div>
+                    <div style="position: absolute; bottom: 2%; left: 1%; background: rgba(15,23,42,0.75); color: #fff; font-size: 0.72rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; line-height: 1.2; pointer-events: none;">🏎️ أمامي مجسم</div>
+                    <div style="position: absolute; bottom: 2%; right: 1%; background: rgba(15,23,42,0.75); color: #fff; font-size: 0.72rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; line-height: 1.2; pointer-events: none;">🏎️ خلفي مجسم</div>
+                }
+
+                <!-- Render Placed Damage Marks for this View -->
+                @foreach (var item in VisibleMarksWithCoords)
+                {
+                    var mark = item.Mark;
+                    var index = item.GlobalIndex;
+                    var isSelected = _activeSelectedMark?.Id == mark.Id;
+                    var isNewReturn = IsComparisonMode && mark.InspectionPhase == "ReturnIn";
+
+                    <div class="vcd-mark-node @(mark.IsRepaired ? "repaired" : "") @(isSelected ? "selected" : "") @(isNewReturn ? "new-return" : "")"
+                         style="left: @item.DisplayX.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; top: @item.DisplayY.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; --mark-color: @mark.Color;"
+                         @onclick:stopPropagation="true"
+                         @onclick="() => SelectMark(mark)"
+                         title="@($"{mark.DamageType}: {mark.Description}")">
+
+                        @if (mark.Shape == "circle")
+                        {
+                            <div class="vcd-circle-shape" style="border-color: @mark.Color; background: @(mark.IsRepaired ? "rgba(16, 185, 129, 0.25)" : mark.Color + "33");">
+                                <span class="vcd-shape-label" style="background: @mark.Color;">@index</span>
+                            </div>
+                        }
+                        else if (mark.Shape == "cross")
+                        {
+                            <div class="vcd-cross-shape" style="color: @mark.Color; background: #ffffff; border: 1.5px solid @mark.Color;">
+                                <span>✖</span>
+                                <span class="vcd-sub-index">@index</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <!-- Pin -->
+                            <div class="vcd-pin-shape" style="background: @mark.Color;">
+                                <span>@index</span>
+                            </div>
+                        }
+
+                        @if (mark.IsRepaired)
+                        {
+                            <span class="vcd-repaired-tag">✓ تم الإصلاح</span>
+                        }
+                        else if (isNewReturn)
+                        {
+                            <span class="vcd-new-tag">⚠️ جديد</span>
+                        }
+                    </div>
+                }
+
+                <!-- Draft Pending Mark (When user clicked to add) -->
+                @if (_pendingX.HasValue && _pendingY.HasValue && !ReadOnly)
+                {
+                    <div class="vcd-pending-mark" 
+                         style="left: @_pendingX.Value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; top: @_pendingY.Value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%; --mark-color: @_selectedTypeColor;">
+                        <div class="pulse-ring"></div>
+                        <div class="vcd-pin-shape" style="background: @_selectedTypeColor;">
+                            <span>+</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Floating Add Damage Form Modal/Card -->
+        @if (_pendingX.HasValue && _pendingY.HasValue && !ReadOnly)
+        {
+            <div class="vcd-floating-form" style="position: absolute; bottom: 16px; z-index: 100; max-width: 480px; width: 90%; background: #ffffff; border: 2px solid var(--primary-blue); border-radius: 12px; padding: 14px 18px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2); animation: fadeIn 0.2s ease;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; margin-bottom: 10px;">
+                    <div style="font-weight: 800; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                        <span style="color: @_selectedTypeColor; font-size: 1.1rem;">●</span>
+                        <span>إضافة علامة: @_selectedType (الموقع: @_pendingX.Value% ، @_pendingY.Value%)</span>
+                    </div>
+                    <button type="button" class="btn-close-modal" style="font-size: 1.1rem;" @onclick="CancelPending">×</button>
+                </div>
+
+                <!-- Quick suggestions -->
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
+                    <span style="font-size: 0.76rem; color: var(--text-muted); font-weight: bold;">أمثلة سريعة:</span>
+                    @foreach (var sample in _quickSamples)
+                    {
+                        <button type="button" class="filter-pill" style="padding: 2px 8px; font-size: 0.74rem;" @onclick="() => _pendingDescription = sample">
+                            @sample
+                        </button>
+                    }
+                </div>
+
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <input type="text" class="form-control" placeholder="اكتب وصف الضرر (e.g. خدش سطحي 8 سم على الباب أو ضربة بالمصد)..." 
+                           @bind="_pendingDescription" autofocus />
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                    <button type="button" class="filter-pill" @onclick="CancelPending">إلغاء</button>
+                    <button type="button" class="btn-primary-action" style="background: @_selectedTypeColor; border-color: @_selectedTypeColor;" @onclick="ConfirmAddMark">
+                        <span>✓ تثبيت العلامة في هذا المكان</span>
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- Active Selected Mark Inspector Card -->
+        @if (_activeSelectedMark != null)
+        {
+            <div class="vcd-floating-form" style="position: absolute; top: 16px; right: 16px; z-index: 100; max-width: 380px; width: 85%; background: #ffffff; border: 2px solid @_activeSelectedMark.Color; border-radius: 12px; padding: 14px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2); animation: fadeIn 0.2s ease;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="background: @_activeSelectedMark.Color; color: #fff; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: bold;">
+                            @(Marks.IndexOf(_activeSelectedMark) + 1)
+                        </span>
+                        <div>
+                            <div style="font-weight: 800; font-size: 0.92rem; color: var(--text-main);">
+                                @_activeSelectedMark.DamageType
+                            </div>
+                            <div style="font-size: 0.74rem; color: var(--text-muted);">
+                                @(_activeSelectedMark.CreatedAt.ToString("yyyy/MM/dd HH:mm")) @(!string.IsNullOrEmpty(_activeSelectedMark.CreatedBy) ? $"بواسطة: {_activeSelectedMark.CreatedBy}" : "")
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close-modal" style="font-size: 1.1rem;" @onclick="() => _activeSelectedMark = null">×</button>
+                </div>
+
+                <div style="background: #f8fafc; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; font-size: 0.85rem; font-weight: 600; color: #1e293b;">
+                    @(!string.IsNullOrWhiteSpace(_activeSelectedMark.Description) ? _activeSelectedMark.Description : "لا يوجد وصف إضافي")
+                </div>
+
+                @if (_activeSelectedMark.IsRepaired)
+                {
+                    <div style="background: #d1fae5; color: #065f46; border: 1px solid #10b981; border-radius: 6px; padding: 6px 10px; font-size: 0.78rem; font-weight: bold; margin-bottom: 10px;">
+                        ✓ تم إصلاح هذا الضرر وإزالته @(_activeSelectedMark.RepairedAt.HasValue ? $"بتاريخ {_activeSelectedMark.RepairedAt.Value.ToString("yyyy/MM/dd")}" : "") @(!string.IsNullOrEmpty(_activeSelectedMark.RepairedBy) ? $"({_activeSelectedMark.RepairedBy})" : "")
+                    </div>
+                }
+
+                @if (!ReadOnly)
+                {
+                    <div style="display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+                        @if (!_activeSelectedMark.IsRepaired)
+                        {
+                            <button type="button" class="filter-pill" style="background: #10b981; color: #ffffff; border-color: #10b981; font-weight: bold; font-size: 0.78rem;" @onclick="() => ToggleRepairMark(_activeSelectedMark)">
+                                <span>🔧 تم إصلاح الخدش / الضرر</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <button type="button" class="filter-pill" style="font-size: 0.78rem;" @onclick="() => ToggleRepairMark(_activeSelectedMark)">
+                                <span>↩️ إعادته كضرر قائم</span>
+                            </button>
+                        }
+
+                        <button type="button" class="filter-pill" style="color: #ef4444; border-color: #fca5a5; font-size: 0.78rem;" title="حذف العلامة نهائياً" @onclick="() => DeleteMark(_activeSelectedMark)">
+                            <span>🗑️ حذف</span>
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Summary Statistics & List of Registered Damages -->
+    <div style="background: #ffffff; border: 1.5px solid var(--border-color); border-radius: 12px; padding: 14px 18px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid var(--border-subtle); padding-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 800; font-size: 0.95rem; color: var(--text-main);">
+                    📋 سجل الأضرار والخدوش المسجلة على المركبة (@Marks.Count):
+                </span>
+                @if (Marks.Any(m => !m.IsRepaired))
+                {
+                    <span style="background: #fee2e2; color: #b91c1c; border: 1px solid #ef4444; padding: 2px 8px; border-radius: 6px; font-weight: bold; font-size: 0.76rem;">
+                        ⚠️ @Marks.Count(m => !m.IsRepaired) أضرار قائمة
+                    </span>
+                }
+                else
+                {
+                    <span style="background: #d1fae5; color: #065f46; border: 1px solid #10b981; padding: 2px 8px; border-radius: 6px; font-weight: bold; font-size: 0.76rem;">
+                        🟢 الهيكل سليم ولا توجد أضرار قائمة
+                    </span>
+                }
+            </div>
+
+            <div style="display: flex; gap: 6px;">
+                <button type="button" class="filter-pill @(_filterRepaired == null ? "active" : "")" style="padding: 2px 8px; font-size: 0.74rem;" @onclick="() => _filterRepaired = null">الكل (@Marks.Count)</button>
+                <button type="button" class="filter-pill @(_filterRepaired == false ? "active" : "")" style="padding: 2px 8px; font-size: 0.74rem;" @onclick="() => _filterRepaired = false">القائمة (@Marks.Count(m => !m.IsRepaired))</button>
+                <button type="button" class="filter-pill @(_filterRepaired == true ? "active" : "")" style="padding: 2px 8px; font-size: 0.74rem;" @onclick="() => _filterRepaired = true">المصلحة (@Marks.Count(m => m.IsRepaired))</button>
+            </div>
+        </div>
+
+        @if (FilteredMarksList.Any())
+        {
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px;">
+                @for (int i = 0; i < FilteredMarksList.Count; i++)
+                {
+                    var m = FilteredMarksList[i];
+                    var isSelected = _activeSelectedMark?.Id == m.Id;
+
+                    <div style="background: @(m.IsRepaired ? "#f8fafc" : "#ffffff"); border: 1.5px solid @(isSelected ? m.Color : "#e2e8f0"); border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: all 0.2s; box-shadow: @(isSelected ? $"0 0 8px {m.Color}44" : "none");"
+                         @onclick="() => FocusMark(m)">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span style="background: @m.Color; color: #fff; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: bold;">
+                                    @(Marks.IndexOf(m) + 1)
+                                </span>
+                                <strong style="font-size: 0.86rem; color: var(--text-main); text-decoration: @(m.IsRepaired ? "line-through" : "none");">
+                                    @m.DamageType
+                                </strong>
+                            </div>
+                            <span style="font-size: 0.72rem; color: var(--text-muted); background: #f1f5f9; padding: 2px 6px; border-radius: 4px;">
+                                @GetViewArabicName(m.ViewType)
+                            </span>
+                        </div>
+
+                        <div style="font-size: 0.8rem; color: @(m.IsRepaired ? "#64748b" : "#334155"); margin-bottom: 6px; font-weight: 500;">
+                            @(!string.IsNullOrWhiteSpace(m.Description) ? m.Description : "بدون وصف")
+                        </div>
+
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: var(--text-muted); border-top: 1px dashed #e2e8f0; padding-top: 4px;">
+                            <span>@m.CreatedAt.ToString("yyyy/MM/dd")</span>
+                            @if (m.IsRepaired)
+                            {
+                                <span style="color: #059669; font-weight: bold;">✓ مصلح</span>
+                            }
+                            else if (!ReadOnly)
+                            {
+                                <button type="button" style="background: none; border: none; color: #0284c7; cursor: pointer; font-weight: bold;" @onclick:stopPropagation="true" @onclick="() => ToggleRepairMark(m)">
+                                    إصلاح
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div style="text-align: center; color: var(--text-muted); padding: 16px; font-size: 0.86rem; font-weight: 600;">
+                لا توجد علامات مسجلة في هذا القسم حتى الآن.
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .vcd-tab-btn {
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--text-main);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s;
+    }
+    .vcd-tab-btn:hover {
+        background: #f1f5f9;
+        border-color: var(--primary-blue);
+    }
+    .vcd-tab-btn.active {
+        background: var(--primary-blue);
+        color: #ffffff;
+        border-color: var(--primary-blue);
+    }
+    .vcd-badge {
+        background: #ef4444;
+        color: #fff;
+        border-radius: 10px;
+        padding: 1px 6px;
+        font-size: 0.72rem;
+        font-weight: bold;
+    }
+    .vcd-tab-btn.active .vcd-badge {
+        background: #ffffff;
+        color: var(--primary-blue);
+    }
+
+    .vcd-tool-btn {
+        background: transparent;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: pointer;
+        color: #475569;
+        transition: all 0.15s;
+    }
+    .vcd-tool-btn.active {
+        background: #ffffff;
+        color: var(--primary-blue);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .vcd-type-pill {
+        background: #ffffff;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-main);
+        transition: all 0.2s;
+    }
+    .vcd-type-pill.selected {
+        background: var(--accent);
+        color: #ffffff;
+    }
+
+    .vcd-mark-node {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        cursor: pointer;
+        z-index: 10;
+        transition: transform 0.15s;
+    }
+    .vcd-mark-node:hover {
+        transform: translate(-50%, -50%) scale(1.2);
+        z-index: 20;
+    }
+    .vcd-mark-node.selected {
+        transform: translate(-50%, -50%) scale(1.25);
+        z-index: 30;
+    }
+
+    .vcd-circle-shape {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 2px solid var(--mark-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: pulseSubtle 2s infinite ease-in-out;
+    }
+    .vcd-shape-label {
+        color: #ffffff;
+        font-size: 0.74rem;
+        font-weight: 800;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .vcd-pin-shape {
+        width: 24px;
+        height: 24px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        border: 1.5px solid #ffffff;
+    }
+    .vcd-pin-shape span {
+        transform: rotate(45deg);
+        font-size: 0.72rem;
+        font-weight: 800;
+    }
+
+    .vcd-cross-shape {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: 800;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        position: relative;
+    }
+    .vcd-sub-index {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        background: #1e293b;
+        color: #fff;
+        font-size: 0.62rem;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .vcd-repaired-tag {
+        position: absolute;
+        top: -16px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #059669;
+        color: #ffffff;
+        font-size: 0.62rem;
+        padding: 1px 4px;
+        border-radius: 4px;
+        white-space: nowrap;
+        font-weight: bold;
+    }
+
+    .vcd-new-tag {
+        position: absolute;
+        top: -16px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #dc2626;
+        color: #ffffff;
+        font-size: 0.62rem;
+        padding: 1px 4px;
+        border-radius: 4px;
+        white-space: nowrap;
+        font-weight: bold;
+        box-shadow: 0 0 6px rgba(220, 38, 38, 0.6);
+    }
+
+    .vcd-mark-node.repaired {
+        opacity: 0.65;
+    }
+
+    .vcd-pending-mark {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 50;
+    }
+
+    .pulse-ring {
+        position: absolute;
+        left: -12px;
+        top: -12px;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border: 3px solid var(--mark-color);
+        animation: pulseRing 1.2s infinite ease-out;
+    }
+
+    @@keyframes pulseRing {
+        0% { transform: scale(0.5); opacity: 1; }
+        100% { transform: scale(1.5); opacity: 0; }
+    }
+
+    @@keyframes pulseSubtle {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.08); }
+    }
+</style>
+
+@code {
+    [Parameter] public List<VehicleDamageMark> Marks { get; set; } = new();
+    [Parameter] public EventCallback<List<VehicleDamageMark>> MarksChanged { get; set; }
+    [Parameter] public bool ReadOnly { get; set; } = false;
+    [Parameter] public string InspectionPhase { get; set; } = "Initial";
+    [Parameter] public Guid? ContractId { get; set; }
+    [Parameter] public string? ContractNumber { get; set; }
+    [Parameter] public string CurrentStaffUsername { get; set; } = string.Empty;
+    [Parameter] public bool IsComparisonMode { get; set; } = false;
+    [Parameter] public EventCallback OnDamagesUpdated { get; set; }
+
+    private string _activeView = "all";
+    private string _selectedShape = "circle";
+    private string _selectedType = "خدش";
+    private string _selectedTypeColor = "#f59e0b";
+    private string _containerId = "vcd_container_" + Guid.NewGuid().ToString("N")[..8];
+
+    private double? _pendingX;
+    private double? _pendingY;
+    private string _pendingDescription = "";
+    private VehicleDamageMark? _activeSelectedMark;
+    private bool? _filterRepaired = null;
+
+    private record DamageTypeOption(string Name, string Color);
+    private readonly List<DamageTypeOption> _damageTypes = new()
+    {
+        new("خدش", "#f59e0b"),
+        new("ضربة / صدمة", "#ef4444"),
+        new("كسر / تغيير", "#8b5cf6"),
+        new("حكة دهان", "#0284c7"),
+        new("أخرى", "#64748b")
+    };
+
+    private readonly List<string> _quickSamples = new()
+    {
+        "خدش سطحي 5 سم",
+        "ضربة خفيفة بالصدام",
+        "حكة دهان على الرفرف",
+        "كسر في المرآة الجانبية",
+        "صدمة في الباب",
+        "شعر في الزجاج الأمامي"
+    };
+
+    private string _selectedShapeText => _selectedShape switch
+    {
+        "circle" => "دائرة تحديد",
+        "pin" => "علامة نقطية",
+        "cross" => "صدمة X",
+        _ => "دائرة"
+    };
+
+    private string CurrentViewImage => _activeView switch
+    {
+        "front" => "images/inspection/car_front.png",
+        "side" => "images/inspection/car_side.png",
+        "rear" => "images/inspection/car_rear.png",
+        "persp_front" => "images/inspection/car_persp_front.png",
+        "persp_rear" => "images/inspection/car_persp_rear.png",
+        _ => "images/inspection/car_all_clean.png"
+    };
+
+    private string CurrentViewAspectRatio => _activeView switch
+    {
+        "front" => "402 / 306",
+        "side" => "768 / 291",
+        "rear" => "396 / 324",
+        "persp_front" => "735 / 363",
+        "persp_rear" => "723 / 369",
+        _ => "1590 / 696"
+    };
+
+    private string CurrentViewMaxWidth => _activeView switch
+    {
+        "front" => "460px",
+        "side" => "850px",
+        "rear" => "460px",
+        "persp_front" => "750px",
+        "persp_rear" => "750px",
+        _ => "960px"
+    };
+
+    private record DisplayMarkItem(VehicleDamageMark Mark, double DisplayX, double DisplayY, int GlobalIndex);
+
+    private List<DisplayMarkItem> VisibleMarksWithCoords
+    {
+        get
+        {
+            var result = new List<DisplayMarkItem>();
+            for (int i = 0; i < Marks.Count; i++)
+            {
+                var mark = Marks[i];
+                if (_activeView == "all")
+                {
+                    var coords = VehicleInspectionCoordinates.ToUniversalCoordinates(mark);
+                    result.Add(new DisplayMarkItem(mark, coords.X, coords.Y, i + 1));
+                }
+                else
+                {
+                    var coords = VehicleInspectionCoordinates.ToSubViewCoordinates(mark, _activeView);
+                    if (coords.HasValue)
+                    {
+                        result.Add(new DisplayMarkItem(mark, coords.Value.X, coords.Value.Y, i + 1));
+                    }
+                }
+            }
+            return result;
+        }
+    }
+
+    private List<VehicleDamageMark> FilteredMarksList =>
+        Marks.Where(m => _filterRepaired == null || m.IsRepaired == _filterRepaired).ToList();
+
+    private int GetMarksCountForView(string view) =>
+        view == "all"
+            ? Marks.Count(m => !m.IsRepaired)
+            : Marks.Count(m => !m.IsRepaired && VehicleInspectionCoordinates.ToSubViewCoordinates(m, view).HasValue);
+
+    private void SetView(string view)
+    {
+        _activeView = view;
+        _pendingX = null;
+        _pendingY = null;
+        _activeSelectedMark = null;
+    }
+
+    private void SelectDamageType(DamageTypeOption option)
+    {
+        _selectedType = option.Name;
+        _selectedTypeColor = option.Color;
+    }
+
+    private async Task HandleDiagramClick(MouseEventArgs e)
+    {
+        if (ReadOnly) return;
+        _activeSelectedMark = null;
+
+        try
+        {
+            var coords = await JS.InvokeAsync<ClickCoords>("vehicleDiagramInterop.getRelativeClick", _containerId, e.ClientX, e.ClientY);
+            if (coords != null)
+            {
+                _pendingX = coords.X;
+                _pendingY = coords.Y;
+                _pendingDescription = "";
+            }
+        }
+        catch
+        {
+            // fallback
+            _pendingX = 50.0;
+            _pendingY = 50.0;
+        }
+    }
+
+    private class ClickCoords
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
+    }
+
+    private void CancelPending()
+    {
+        _pendingX = null;
+        _pendingY = null;
+        _pendingDescription = "";
+    }
+
+    private async Task ConfirmAddMark()
+    {
+        if (!_pendingX.HasValue || !_pendingY.HasValue) return;
+
+        string desc = _pendingDescription;
+        if (string.IsNullOrWhiteSpace(desc))
+        {
+            if (_activeView == "all")
+            {
+                var section = VehicleInspectionCoordinates.DetectAngleSection(_pendingX.Value, _pendingY.Value);
+                desc = $"{_selectedType} ({VehicleInspectionCoordinates.GetViewArabicName(section)})";
+            }
+            else
+            {
+                desc = $"{_selectedType} ({VehicleInspectionCoordinates.GetViewArabicName(_activeView)})";
+            }
+        }
+
+        var newMark = new VehicleDamageMark
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            ViewType = _activeView,
+            XPercent = _pendingX.Value,
+            YPercent = _pendingY.Value,
+            DamageType = _selectedType,
+            Description = desc,
+            Shape = _selectedShape,
+            Color = _selectedTypeColor,
+            CreatedAt = DateTime.Now,
+            CreatedBy = CurrentStaffUsername,
+            InspectionPhase = InspectionPhase,
+            ContractId = ContractId,
+            ContractNumber = ContractNumber
+        };
+
+        Marks.Add(newMark);
+        CancelPending();
+
+        await MarksChanged.InvokeAsync(Marks);
+        await OnDamagesUpdated.InvokeAsync();
+    }
+
+    private void SelectMark(VehicleDamageMark mark)
+    {
+        _activeSelectedMark = mark;
+        CancelPending();
+    }
+
+    private void FocusMark(VehicleDamageMark mark)
+    {
+        if (mark.ViewType != "all")
+        {
+            _activeView = mark.ViewType;
+        }
+        _activeSelectedMark = mark;
+        CancelPending();
+    }
+
+    private async Task ToggleRepairMark(VehicleDamageMark mark)
+    {
+        mark.IsRepaired = !mark.IsRepaired;
+        if (mark.IsRepaired)
+        {
+            mark.RepairedAt = DateTime.Now;
+            mark.RepairedBy = CurrentStaffUsername;
+        }
+        else
+        {
+            mark.RepairedAt = null;
+            mark.RepairedBy = null;
+        }
+
+        await MarksChanged.InvokeAsync(Marks);
+        await OnDamagesUpdated.InvokeAsync();
+    }
+
+    private async Task DeleteMark(VehicleDamageMark mark)
+    {
+        Marks.Remove(mark);
+        if (_activeSelectedMark?.Id == mark.Id)
+        {
+            _activeSelectedMark = null;
+        }
+
+        await MarksChanged.InvokeAsync(Marks);
+        await OnDamagesUpdated.InvokeAsync();
+    }
+
+    private string GetViewArabicName(string view) => view switch
+    {
+        "front" => "أمامي",
+        "side" => "جانبي",
+        "rear" => "خلفي",
+        "persp_front" => "أمامي مجسم",
+        "persp_rear" => "خلفي مجسم",
+        _ => "المخطط الشامل"
+    };
+}

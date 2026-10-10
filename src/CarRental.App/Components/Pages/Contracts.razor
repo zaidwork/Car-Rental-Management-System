@@ -1,0 +1,1876 @@
+@page "/contracts"
+@using CarRental.Core.Helpers
+@using CarRental.App.Helpers
+@using CarRental.Infrastructure.Helpers
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+@implements IDisposable
+
+<div style="display: flex; flex-direction: column; gap: 18px;">
+    <!-- Top Executive KPIs for instant operational understanding -->
+    <div class="contracts-kpi-grid">
+        <div class="contracts-kpi-card kpi-blue">
+            <div class="contracts-kpi-icon">📋</div>
+            <div class="contracts-kpi-body">
+                <span class="contracts-kpi-title">العقود النشطة بالشارع</span>
+                <div class="contracts-kpi-val">
+                    @ActiveCount <span style="font-size: 0.85rem; font-weight: 700; color: #64748b;">عقد نشط</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="contracts-kpi-card @(OverdueOrDueTodayCount > 0 ? "kpi-red" : "kpi-green")">
+            <div class="contracts-kpi-icon">@(OverdueOrDueTodayCount > 0 ? "🚨" : "✓")</div>
+            <div class="contracts-kpi-body">
+                <span class="contracts-kpi-title">تستحق الإرجاع اليوم أو متأخرة</span>
+                <div class="contracts-kpi-val" style="color: @(OverdueOrDueTodayCount > 0 ? "#dc2626" : "#15803d");">
+                    @OverdueOrDueTodayCount <span style="font-size: 0.85rem; font-weight: 700; color: #64748b;">مركبة</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="contracts-kpi-card kpi-green">
+            <div class="contracts-kpi-icon">💰</div>
+            <div class="contracts-kpi-body">
+                <span class="contracts-kpi-title">إجمالي إيرادات العقود النشطة</span>
+                <div class="contracts-kpi-val" style="color: #15803d;">
+                    @ActiveTotalAgreedAmount.ToString("N0") <span style="font-size: 0.85rem; font-weight: 700; color: #64748b;">₪</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="contracts-kpi-card @(ActiveRemainingDebtAmount > 0 ? "kpi-amber" : "kpi-blue")">
+            <div class="contracts-kpi-icon">💳</div>
+            <div class="contracts-kpi-body">
+                <span class="contracts-kpi-title">ذمم ومتبقيات غير محصلة</span>
+                <div class="contracts-kpi-val" style="color: @(ActiveRemainingDebtAmount > 0 ? "#b45309" : "#0284c7");">
+                    @ActiveRemainingDebtAmount.ToString("N0") <span style="font-size: 0.85rem; font-weight: 700; color: #64748b;">₪</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Bar & Filter Controls -->
+    <div class="action-bar-strip" style="background: #ffffff; padding: 14px 18px; border-radius: 12px; border: 1.5px solid #e2e8f0; box-shadow: 0 2px 8px rgba(15,23,42,0.03);">
+        <div class="action-bar-left">
+            <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--text-main); margin: 0;">إدارة الحجوزات والعقود (Rentals & Contracts)</h2>
+            <span style="font-size: 0.84rem; color: var(--text-muted); font-weight: 500;">
+                إصدار العقود الرسمية، الكمبيالات الضامنة، واستلام وتسوية المركبات
+            </span>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <div class="search-input-box" style="min-width: 260px;">
+                <input type="text" placeholder="بحث برقم العقد أو المستأجر أو اللوحة..." @bind="_searchQuery" @bind:event="oninput" />
+            </div>
+
+            <div class="action-filter-pills">
+                <button class="filter-pill @(_statusFilter == null ? "active" : "")" @onclick="() => SetFilter(null)">
+                    كافة العقود (@TotalCount)
+                </button>
+                <button class="filter-pill @(_statusFilter == ContractStatus.Active ? "active" : "")" @onclick="() => SetFilter(ContractStatus.Active)">
+                    🟢 النشطة (@ActiveCount)
+                </button>
+                <button class="filter-pill @(_statusFilter == ContractStatus.Closed ? "active" : "")" @onclick="() => SetFilter(ContractStatus.Closed)">
+                    🏁 المغلقة (@ClosedCount)
+                </button>
+                <button class="filter-pill @(_statusFilter == ContractStatus.Cancelled ? "active" : "")" @onclick="() => SetFilter(ContractStatus.Cancelled)">
+                    ✕ الملغاة (@CancelledCount)
+                </button>
+            </div>
+
+            <button class="filter-pill" style="border: 1.5px solid #10b981; color: #047857; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px;" @onclick="ExportContractsToExcel" title="تصدير كشف العقود الحالي إلى Excel">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span>تصدير Excel</span>
+            </button>
+
+            <button class="btn-primary-action" style="padding: 9px 20px; font-weight: 800; font-size: 0.92rem;" @onclick="() => _showNewContractModal = true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>+ فتح عقد تأجير جديد</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Contracts Table with High Contrast & Clear Actions -->
+    <div class="data-table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="min-width: 140px;">رقم العقد وتاريخه</th>
+                    <th style="min-width: 190px;">العميل المستأجر</th>
+                    <th style="min-width: 180px;">المركبة واللوحة</th>
+                    <th style="min-width: 170px;">فترة الإيجار والمواعيد</th>
+                    <th style="min-width: 160px;">الحساب المالي (شو إلو وشو عليه)</th>
+                    <th style="min-width: 130px;">كمبيالة الضمان</th>
+                    <th style="min-width: 120px;">حالة العقد</th>
+                    <th style="min-width: 220px; text-align: center;">الإجراءات والعمليات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (FilteredContracts.Any())
+                {
+                    @foreach (var c in FilteredContracts)
+                    {
+                        var isContractOverdue = c.Status == ContractStatus.Active && !c.IsOpenEnded && c.ExpectedReturnDateTime < DateTime.Now;
+                        var isDueToday = c.Status == ContractStatus.Active && !c.IsOpenEnded && c.ExpectedReturnDateTime.Date == DateTime.Today && !isContractOverdue;
+
+                        <tr style="@(isContractOverdue ? "background: #fff8f8;" : "")">
+                            <!-- 1. Contract Code & Date -->
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <span class="contract-code-pill">@c.ContractNumber</span>
+                                    <span style="font-size: 0.76rem; color: #64748b;">@c.StartDateTime.ToString("yyyy/MM/dd • HH:mm")</span>
+                                </div>
+                            </td>
+
+                            <!-- 2. Customer Info -->
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <div style="display: flex; align-items: center; gap: 6px; justify-content: space-between;">
+                                        <strong style="font-size: 0.98rem; color: #0f172a;">@c.Customer?.FullName</strong>
+                                        @if (!string.IsNullOrEmpty(c.Customer?.PrimaryPhone))
+                                        {
+                                            <button class="btn-wa-pill" title="تواصل واتساب مع المستأجر" @onclick="() => SendWhatsApp(c)">
+                                                💬 واتساب
+                                            </button>
+                                        }
+                                    </div>
+                                    <div style="font-size: 0.78rem; color: #64748b;">
+                                        هوية: <span style="font-family: monospace;">@c.Customer?.NationalIdOrPassport</span>
+                                        @if (!string.IsNullOrEmpty(c.Customer?.PrimaryPhone))
+                                        {
+                                            <span> • @c.Customer.PrimaryPhone</span>
+                                        }
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- 3. Vehicle & Plate -->
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: 5px;">
+                                    <div style="font-weight: 800; font-size: 0.94rem; color: #0f172a;">@c.Vehicle?.Brand @c.Vehicle?.Model</div>
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <span class="license-plate-badge">@c.Vehicle?.PlateNumber</span>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- 4. Rental Duration & Dates -->
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    @if (c.IsOpenEnded)
+                                    {
+                                        <div style="font-size: 0.85rem; font-weight: 700;">من: @c.StartDateTime.ToString("yyyy/MM/dd")</div>
+                                        <span style="display: inline-block; background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; border-radius: 4px; padding: 2px 7px; font-size: 0.76rem; font-weight: 800;">
+                                            ♾️ عقد مفتوح (@c.OpenRentalDays يوم)
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <div style="font-size: 0.84rem; font-weight: 600;">
+                                            من: @c.StartDateTime.ToString("yyyy/MM/dd")
+                                        </div>
+                                        <div style="font-size: 0.84rem; font-weight: 700; color: #0f172a;">
+                                            إلى: @c.ExpectedReturnDateTime.ToString("yyyy/MM/dd HH:mm")
+                                        </div>
+                                    }
+
+                                    @if (isContractOverdue)
+                                    {
+                                        <span style="background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; border-radius: 4px; padding: 2px 6px; font-size: 0.74rem; font-weight: 800; display: inline-flex; align-items: center; gap: 3px;">
+                                            🚨 متأخرة عن الإرجاع
+                                        </span>
+                                    }
+                                    else if (isDueToday)
+                                    {
+                                        <span style="background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; border-radius: 4px; padding: 2px 6px; font-size: 0.74rem; font-weight: 800; display: inline-flex; align-items: center; gap: 3px;">
+                                            ⚠️ موعد الإرجاع اليوم
+                                        </span>
+                                    }
+                                </div>
+                            </td>
+
+                            <!-- 5. Financials (What is paid vs remaining) -->
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <div style="font-size: 0.94rem; font-weight: 800; color: #0f172a;">
+                                        @if (c.IsOpenEnded && c.Status == ContractStatus.Active)
+                                        {
+                                            <span>@c.OpenRentalAccruedAmount.ToString("N0") ₪ <small style="font-size: 0.72rem; color: #64748b;">(مستحق حتى الآن)</small></span>
+                                        }
+                                        else
+                                        {
+                                            <span>@c.TotalAgreedAmount.ToString("N0") ₪ <small style="font-size: 0.72rem; color: #64748b;">(@c.DailyAgreedRate ₪/يوم)</small></span>
+                                        }
+                                    </div>
+
+                                    <div style="color: #15803d; font-weight: 800; font-size: 0.82rem;">
+                                        ✓ مدفوع: @c.PaidAmount.ToString("N0") ₪
+                                    </div>
+
+                                    @if (c.IsOpenEnded && c.Status == ContractStatus.Active)
+                                    {
+                                        @if (c.OpenRentalCurrentDue > 0)
+                                        {
+                                            <div style="color: #dc2626; font-weight: 800; font-size: 0.82rem;">
+                                                ⚠️ ذمم حالية: @c.OpenRentalCurrentDue.ToString("N0") ₪
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div style="color: #15803d; font-weight: 700; font-size: 0.76rem;">خالص حتى اللحظة ✓</div>
+                                        }
+                                    }
+                                    else if (c.RemainingAmount > 0)
+                                    {
+                                        <div style="color: #dc2626; font-weight: 800; font-size: 0.82rem;">
+                                            ⚠️ متبقي: @c.RemainingAmount.ToString("N0") ₪
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div style="color: #15803d; font-weight: 700; font-size: 0.76rem;">مسدد بالكامل ✓</div>
+                                    }
+                                </div>
+                            </td>
+
+                            <!-- 6. Promissory Note -->
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: 3px;">
+                                    <strong style="font-size: 0.95rem; color: #92400e;">@c.PromissoryNoteAmount.ToString("N0") ₪</strong>
+                                    <span style="font-size: 0.74rem; color: #64748b;">
+                                        @(c.PromissoryNote?.Status == PromissoryNoteStatus.HeldInTrust ? "🛡️ محجوزة كأمانة" : "✓ تم الإفراج عنها")
+                                    </span>
+                                </div>
+                            </td>
+
+                            <!-- 7. Status -->
+                            <td>
+                                @if (c.Status == ContractStatus.Active)
+                                {
+                                    <span class="badge-status-active">
+                                        <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981;"></span>
+                                        <span>ساري ونشط</span>
+                                    </span>
+                                }
+                                else if (c.Status == ContractStatus.Cancelled)
+                                {
+                                    <span class="badge-status-cancelled">
+                                        <span>✕ ملغي ومسترجع</span>
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge-status-closed">
+                                        <span>✓ مغلق ومستلم</span>
+                                    </span>
+                                }
+                            </td>
+
+                            <!-- 8. Direct Smart Actions -->
+                            <td>
+                                <div class="smart-actions-cell">
+                                    @if (c.Status == ContractStatus.Active)
+                                    {
+                                        <div class="smart-primary-btns">
+                                            <button class="btn-action-return" @onclick="() => StartReturnFlow(c)" title="استلام السيارة وإجراء المخالصة والتسوية الذكية">
+                                                <span>استلام وتسوية 📥</span>
+                                            </button>
+
+                                            <button class="btn-action-payment" @onclick="() => OpenPayContractModal(c)" title="قبض دفعة مالية وإصدار سند قبض رسمي فوري على هذا العقد">
+                                                <span>قبض دفعة 💰</span>
+                                            </button>
+
+                                            @if (!c.IsOpenEnded)
+                                            {
+                                                <button class="btn-action-extend" @onclick="() => _contractToExtend = c" title="تمديد فترة العقد">
+                                                    <span>تمديد ⏱️</span>
+                                                </button>
+                                            }
+                                        </div>
+
+                                        <div class="smart-tools-row">
+                                            <button class="tool-btn-pill" title="معاينة وطباعة العقد A4" @onclick="() => PrintDocument(c, true)">
+                                                <span>📄 عقد</span>
+                                            </button>
+                                            <button class="tool-btn-pill" title="معاينة وطباعة الكمبيالة A4" @onclick="() => PrintDocument(c, false)">
+                                                <span>📜 كمبيالة</span>
+                                            </button>
+                                            <button class="tool-btn-pill" title="كشف فحص واستلام الأضرار" @onclick="() => OpenInspectionModal(c)">
+                                                <span>🔍 فحص</span>
+                                            </button>
+                                            <button class="tool-btn-pill tool-btn-cancel" title="فسخ وإلغاء العقد بالكامل" @onclick="() => PromptCancelContract(c)">
+                                                <span>✕ إلغاء</span>
+                                            </button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="smart-tools-row" style="justify-content: center;">
+                                            <button class="tool-btn-pill" title="معاينة وطباعة العقد A4" @onclick="() => PrintDocument(c, true)">
+                                                <span>📄 العقد</span>
+                                            </button>
+                                            <button class="tool-btn-pill" title="معاينة وطباعة الكمبيالة A4" @onclick="() => PrintDocument(c, false)">
+                                                <span>📜 الكمبيالة</span>
+                                            </button>
+                                            <button class="tool-btn-pill" title="كشف الفحص والأضرار" @onclick="() => OpenInspectionModal(c)">
+                                                <span>🔍 الفحص</span>
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 45px 20px; color: #64748b;">
+                            <div style="font-size: 2.2rem; margin-bottom: 10px;">📋</div>
+                            <div style="font-size: 1.05rem; font-weight: 700; color: #334155;">لا توجد عقود تأجير مطابقة للبحث أو الفلتر المختار</div>
+                            <div style="font-size: 0.85rem; margin-top: 4px;">يمكنك البدء بفتح عقد تأجير جديد عبر الزر أعلاه</div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Smart Close Contract & Settle All Differences -->
+@if (_contractToClose != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 680px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span>التسوية الذكية واستلام المركبة (@_contractToClose.ContractNumber)</span>
+                </div>
+                <button class="btn-close-modal" @onclick="() => _contractToClose = null">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="background: #fdfaf4; border: 1.5px solid var(--border-color); border-radius: 8px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 0.92rem; font-weight: 600;">
+                    <div>المركبة: <strong style="color: var(--primary-blue);">@_contractToClose.Vehicle?.Brand @_contractToClose.Vehicle?.Model (لوحة: @_contractToClose.Vehicle?.PlateNumber)</strong></div>
+                    <div>المستأجر: <strong style="color: var(--text-main);">@_contractToClose.Customer?.FullName</strong></div>
+                </div>
+
+                @if (_contractToClose.IsOpenEnded)
+                {
+                    <div style="background: #eff6ff; border: 1.5px solid #60a5fa; border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 800; color: #1e40af; font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
+                                <span>♾️</span> تسوية عقد تأجير مفتوح (احتساب باليوم الفعلي)
+                            </span>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span style="font-size: 0.8rem; color: #1e40af; font-weight: bold;">الأيام المحتسبة:</span>
+                                <button type="button" class="filter-pill" style="padding: 1px 8px; font-weight: bold;" @onclick="() => { if (_openRentalActualDays > 1) { _openRentalActualDays--; _billedDays = _openRentalActualDays; OnBilledDaysChanged(); } }">-</button>
+                                <input type="number" class="form-control" style="width: 60px; text-align: center; font-weight: 900; font-size: 0.95rem; color: #1e40af; padding: 2px;" @bind="_openRentalActualDays" @bind:after="() => { _billedDays = _openRentalActualDays; OnBilledDaysChanged(); }" min="1" />
+                                <button type="button" class="filter-pill" style="padding: 1px 8px; font-weight: bold;" @onclick="() => { _openRentalActualDays++; _billedDays = _openRentalActualDays; OnBilledDaysChanged(); }">+</button>
+                                <span style="font-size: 0.8rem; font-weight: bold;">يوم</span>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 0.82rem; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid #bfdbfe;">
+                            <div>
+                                <div style="color: var(--text-muted);">تاريخ البدء:</div>
+                                <div style="font-weight: bold;">@_contractToClose.StartDateTime.ToString("yyyy/MM/dd HH:mm")</div>
+                            </div>
+                            <div>
+                                <div style="color: var(--text-muted);">تاريخ ووقت الإرجاع:</div>
+                                <div style="font-weight: bold;">@DateTime.Now.ToString("yyyy/MM/dd HH:mm")</div>
+                            </div>
+                            <div>
+                                <div style="color: var(--text-muted);">الأجرة اليومية:</div>
+                                <div style="font-weight: bold; color: var(--primary-blue);">@_contractToClose.DailyAgreedRate.ToString("N0") ₪ / يوم</div>
+                            </div>
+                            <div>
+                                <div style="color: var(--text-muted);">إجمالي أجرة الأيام:</div>
+                                <div style="font-weight: 800; color: #1e3a8a;">@_openRentalAccruedRent.ToString("N0") ₪</div>
+                            </div>
+                        </div>
+                        @if (_contractToClose.PaidAmount > 0)
+                        {
+                            <div style="font-size: 0.82rem; color: #047857; font-weight: 600;">
+                                ✓ تم قبض دفعة أولى مسبقاً عند الاستلام: <strong>@_contractToClose.PaidAmount.ToString("N0") ₪</strong> (مخصومة تلقائياً من المستحق)
+                            </div>
+                        }
+                    </div>
+                }
+                else if (_isEarlyReturn)
+                {
+                    <div style="background: #f0fdf4; border: 2px solid #16a34a; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                            <span style="font-weight: 800; color: #166534; font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
+                                <span>⏱️</span> استلام وتسليم مبكر قبل انتهاء موعد العقد
+                            </span>
+                            <span style="background: #dcfce7; color: #15803d; font-weight: bold; font-size: 0.8rem; padding: 3px 10px; border-radius: 20px; border: 1px solid #86efac;">
+                                مدة العقد الأصلية: @_originalAgreedDays يوم | المدة الفعلية: @_elapsedDays يوم
+                            </span>
+                        </div>
+
+                        <!-- اختيار كم يوم بدك تسحب -->
+                        <div style="background: #ffffff; border: 1.5px solid #86efac; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <label style="font-weight: 900; font-size: 0.92rem; color: #14532d;">
+                                        كم يوم بدك تسحب وتحسب على الزبون؟:
+                                    </label>
+                                    <div style="display: flex; align-items: center; gap: 4px;">
+                                        <button type="button" class="filter-pill" style="padding: 2px 9px; font-weight: bold; font-size: 1rem;" @onclick="DecrementBilledDays">-</button>
+                                        <input type="number" class="form-control" style="width: 75px; text-align: center; font-weight: 900; font-size: 1.15rem; color: #15803d;" @bind="_billedDays" @bind:after="OnBilledDaysChanged" min="1" max="@Math.Max(1, _originalAgreedDays)" />
+                                        <button type="button" class="filter-pill" style="padding: 2px 9px; font-weight: bold; font-size: 1rem;" @onclick="IncrementBilledDays">+</button>
+                                        <span style="font-weight: bold; color: #475569; font-size: 0.85rem;">يوم</span>
+                                    </div>
+                                </div>
+
+                                <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                                    <span style="font-size: 0.76rem; color: #64748b; font-weight: 600;">اختصار:</span>
+                                    <button type="button" class="filter-pill @(_billedDays == _elapsedDays ? "active" : "")" style="font-size: 0.78rem; padding: 3px 8px;" @onclick="() => SetBilledDays(_elapsedDays)">
+                                        المدة الفعلية (@_elapsedDays يوم)
+                                    </button>
+                                    @if (_originalAgreedDays > _elapsedDays)
+                                    {
+                                        <button type="button" class="filter-pill @(_billedDays == _originalAgreedDays ? "active" : "")" style="font-size: 0.78rem; padding: 3px 8px;" @onclick="() => SetBilledDays(_originalAgreedDays)">
+                                            كامل مدة العقد (@_originalAgreedDays يوم)
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 0.82rem; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                                <div>
+                                    <div style="color: var(--text-muted);">الأجرة اليومية:</div>
+                                    <div style="font-weight: 800; color: var(--primary-blue);">@_contractToClose.DailyAgreedRate.ToString("N0") ₪ / يوم</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--text-muted);">أجرة الأيام المسحوبة:</div>
+                                    <div style="font-weight: 900; color: #166534;">@(_billedDays * _contractToClose.DailyAgreedRate).ToString("N0") ₪</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--text-muted);">إجمالي العقد الأصلي:</div>
+                                    <div style="font-weight: bold; color: #64748b; text-decoration: line-through;">@(_contractToClose.TotalAgreedAmount).ToString("N0") ₪</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--text-muted);">فرق الأيام للعميل:</div>
+                                    <div style="font-weight: 900; color: #0284c7;">
+                                        @Math.Max(0, (_originalAgreedDays - _billedDays) * _contractToClose.DailyAgreedRate).ToString("N0") ₪
+                                    </div>
+                                </div>
+                            </div>
+
+                            @if (_contractToClose.PaidAmount > 0)
+                            {
+                                <div style="font-size: 0.82rem; color: #047857; font-weight: 600;">
+                                    ✓ العميل كان قد دفع مقدماً: <strong>@_contractToClose.PaidAmount.ToString("N0") ₪</strong> (يتم تسويتها ومقارنتها تلقائياً مع الأيام المسحوبة)
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+                else if (_isOverdue)
+                {
+                    <div style="background: #fee2e2; border: 1.5px solid #ef4444; border-radius: 8px; padding: 10px 14px; color: #991b1b; font-weight: bold; font-size: 0.88rem; display: flex; justify-content: space-between; align-items: center;">
+                        <span>⚠️ تنبيه تأخير: تأخر العميل بمقدار (@_overdueDays يوم) عن موعد الإرجاع المحدد!</span>
+                        <span>غرامة تأخير مقترحة: @_suggestedLateFee.ToString("N0") ₪</span>
+                    </div>
+                }
+                else
+                {
+                    <!-- عقد عادي منتهي بالموعد مع إمكانية تعديل الأيام المحتسبة يدوياً إن لزم -->
+                    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 0.86rem;">
+                        <div>
+                            <span>مدة العقد المتفق عليها: <strong>@_originalAgreedDays يوم</strong> (@(_originalAgreedDays * _contractToClose.DailyAgreedRate) ₪)</span>
+                            @if (_contractToClose.PaidAmount > 0)
+                            {
+                                <span style="margin-right: 12px; color: #166534; font-weight: 600;">| المدفوع مقدماً: @_contractToClose.PaidAmount.ToString("N0") ₪</span>
+                            }
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label style="font-size: 0.8rem; color: var(--text-muted);">الأيام المحتسبة:</label>
+                            <input type="number" class="form-control" style="width: 65px; text-align: center; font-weight: bold; font-size: 0.9rem;" @bind="_billedDays" @bind:after="OnBilledDaysChanged" min="1" />
+                            <span style="font-size: 0.8rem;">يوم</span>
+                        </div>
+                    </div>
+                }
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">قراءة العداد عند الاستلام (كم):</label>
+                        <input type="number" class="form-control" @bind="_endOdometer" @bind:after="OnOdometerOrFuelChanged" />
+                        <span style="font-size: 0.76rem; color: var(--text-muted); font-weight: 600;">
+                            كان عند التسليم: @_contractToClose.StartOdometer.ToString("N0") كم (المسافة: @Math.Max(0, _endOdometer - _contractToClose.StartOdometer).ToString("N0") كم)
+                        </span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">مستوى الوقود عند الاستلام:</label>
+                        <select class="form-control" @bind="_endFuel" @bind:after="OnOdometerOrFuelChanged">
+                            <option value="@FuelLevel.Full">ممتلئ تماماً (Full)</option>
+                            <option value="@FuelLevel.ThreeQuarters">3/4 خزان</option>
+                            <option value="@FuelLevel.Half">نصف خزان</option>
+                            <option value="@FuelLevel.Quarter">1/4 خزان</option>
+                            <option value="@FuelLevel.Empty">فارغ</option>
+                        </select>
+                        <span style="font-size: 0.76rem; color: var(--text-muted);">كان عند الخروج: <strong>@_contractToClose.FuelLevelStart</strong></span>
+                    </div>
+                </div>
+
+                <!-- Settlement Extra Charges Grid -->
+                <div style="background: #ffffff; border: 1.5px solid var(--border-color); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+                    <span style="font-weight: 800; font-size: 0.92rem; color: var(--text-main); border-bottom: 1px solid var(--border-subtle); padding-bottom: 4px;">
+                        احتساب الفروقات والرسوم الإضافية:
+                    </span>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div class="form-group">
+                            <label class="form-label" style="font-size: 0.84rem;">غرامة / أيام التأخير (₪):</label>
+                            <input type="number" class="form-control" @bind="_lateFee" @bind:after="UpdateTotalRequired" min="0" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" style="font-size: 0.84rem;">تعويض نقص الوقود (₪):</label>
+                            <input type="number" class="form-control" @bind="_fuelFee" @bind:after="UpdateTotalRequired" min="0" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" style="font-size: 0.84rem;">كيلومترات زائدة عن الحد (₪):</label>
+                            <input type="number" class="form-control" @bind="_extraKmFee" @bind:after="UpdateTotalRequired" min="0" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" style="font-size: 0.84rem;">تعويض أضرار / خدوش / غسيل (₪):</label>
+                            <input type="number" class="form-control" @bind="_damageFee" @bind:after="UpdateTotalRequired" min="0" />
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="font-size: 0.84rem;">ملاحظات التسوية والأضرار:</label>
+                        <input type="text" class="form-control" placeholder="e.g. تم خصم 50 شيكل لنقص الوقود و 100 لتأخير ساعتين..." @bind="_settleNotes" />
+                    </div>
+
+                    @{
+                        var returnInsp = _contractToClose.Inspections?.FirstOrDefault(i => i.Type == InspectionType.ReturnIn);
+                        var newDamages = returnInsp?.GetDamageMarks().Where(m => m.InspectionPhase == "ReturnIn" && !m.IsRepaired).ToList();
+                    }
+                    @if (newDamages != null && newDamages.Any())
+                    {
+                        <div style="background: #fee2e2; border: 1.5px solid #ef4444; border-radius: 8px; padding: 10px 14px; color: #991b1b; font-size: 0.86rem; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+                            <span>⚠️ تنبيه كشف الاستلام: تم رصد (@newDamages.Count) أضرار وخدوش جديدة على المركبة!</span>
+                            <span style="font-size: 0.78rem; background: #fff; padding: 2px 8px; border-radius: 4px; border: 1px solid #ef4444;">
+                                @string.Join("، ", newDamages.Select(d => d.DamageType + " " + d.Description).Take(2))
+                            </span>
+                        </div>
+                    }
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: @(returnInsp != null ? "#f0fdf4" : "#fdfaf4"); border: 1.5px dashed @(returnInsp != null ? "#10b981" : "var(--accent-gold)"); border-radius: 8px; padding: 10px 14px; margin-top: 4px;">
+                        <div>
+                            <div style="font-size: 0.86rem; font-weight: 800; color: @(returnInsp != null ? "#065f46" : "#78350f");">
+                                @(returnInsp != null ? "✓ تم توثيق كشف فحص الهيكل عند الاستلام بنجاح" : "🚗 كشف حالة الهيكل ومقارنة الخدوش والضربات")
+                            </div>
+                            <div style="font-size: 0.74rem; color: var(--text-muted);">
+                                @(returnInsp != null ? $"تم الفحص بواسطة: {returnInsp.StaffUsername} بتاريخ {returnInsp.InspectionDateTime:yyyy/MM/dd HH:mm}" : "قارن حالة المركبة مع كشف التسليم ورصد أي خدش أو ضربة جديدة حدثت خلال العقد")
+                            </div>
+                        </div>
+                        <button type="button" class="btn-primary-action" style="padding: 5px 12px; font-size: 0.8rem; background: @(returnInsp != null ? "#059669" : "#d97706"); border-color: @(returnInsp != null ? "#059669" : "#d97706");" @onclick="() => InspectContractOnReturn(_contractToClose)">
+                            <span>@(returnInsp != null ? "معاينة / تعديل كشف الفحص" : "🔍 فتح كشف الفحص والمقارنة")</span>
+                        </button>
+                    </div>
+
+                    <!-- Settlement Discount Controller -->
+                    <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                            <div style="display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 0.88rem; color: #0f172a;">
+                                <span>🏷️ نوع الخصم الممنوح عند التسوية / الاستلام:</span>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                <button type="button" 
+                                        class="filter-pill @(_settleDiscountType == "None" ? "active" : "")" 
+                                        style="font-size: 0.78rem; font-weight: bold; cursor: pointer; padding: 3px 10px; border-radius: 6px;"
+                                        @onclick='() => SetSettleDiscountType("None")'>
+                                    بدون خصم
+                                </button>
+                                <button type="button" 
+                                        class="filter-pill @(_settleDiscountType == "Percentage" ? "active" : "")" 
+                                        style="font-size: 0.78rem; font-weight: bold; cursor: pointer; padding: 3px 10px; border-radius: 6px; border-color: @(_settleDiscountType == "Percentage" ? "#2563eb" : "#cbd5e1");"
+                                        @onclick='() => SetSettleDiscountType("Percentage")'>
+                                    % خصم مئوية
+                                </button>
+                                <button type="button" 
+                                        class="filter-pill @(_settleDiscountType == "FixedAmount" ? "active" : "")" 
+                                        style="font-size: 0.78rem; font-weight: bold; cursor: pointer; padding: 3px 10px; border-radius: 6px; border-color: @(_settleDiscountType == "FixedAmount" ? "#16a34a" : "#cbd5e1");"
+                                        @onclick='() => SetSettleDiscountType("FixedAmount")'>
+                                    ₪ خصم قيمة نقدية
+                                </button>
+                            </div>
+                        </div>
+
+                        @if (_settleDiscountType != "None")
+                        {
+                            <div style="background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 6px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <label style="font-weight: 800; font-size: 0.84rem; color: #334155;">
+                                        @(_settleDiscountType == "Percentage" ? "نسبة الخصم (%):" : "مبلغ الخصم (₪):")
+                                    </label>
+                                    <div style="position: relative; width: 110px;">
+                                        <input type="number" 
+                                               class="form-control" 
+                                               style="font-weight: 900; font-size: 1.05rem; text-align: center; color: #dc2626; padding-left: 24px;" 
+                                               @bind="_settleDiscountValue" 
+                                               @bind:after="UpdateTotalRequired" 
+                                               min="0" 
+                                               max="@(_settleDiscountType == "Percentage" ? 100 : 100000)" />
+                                        <span style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-weight: 900; color: #64748b; font-size: 0.9rem;">
+                                            @(_settleDiscountType == "Percentage" ? "%" : "₪")
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                                    <span style="font-size: 0.76rem; color: #64748b; font-weight: 600;">اختصار:</span>
+                                    @if (_settleDiscountType == "Percentage")
+                                    {
+                                        @foreach (var p in new[] { 5, 10, 15, 20, 25 })
+                                        {
+                                            <button type="button" 
+                                                    class="filter-pill" 
+                                                    style="font-size: 0.74rem; padding: 2px 7px; background: #fff; cursor: pointer;"
+                                                    @onclick="() => SetSettleDiscountPreset(p)">
+                                                @p%
+                                            </button>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @foreach (var val in new[] { 20, 50, 100, 150, 200 })
+                                        {
+                                            <button type="button" 
+                                                    class="filter-pill" 
+                                                    style="font-size: 0.74rem; padding: 2px 7px; background: #fff; cursor: pointer;"
+                                                    @onclick="() => SetSettleDiscountPreset(val)">
+                                                @val ₪
+                                            </button>
+                                        }
+                                    }
+                                </div>
+
+                                @if (_settleDiscountAmount > 0)
+                                {
+                                    <div style="width: 100%; border-top: 1px dashed #cbd5e1; padding-top: 6px; margin-top: 2px; display: flex; justify-content: space-between; align-items: center; font-size: 0.84rem;">
+                                        <span style="color: #dc2626; font-weight: bold;">
+                                            قيمة الخصم: -@_settleDiscountAmount.ToString("N0") ₪ @(_settleDiscountType == "Percentage" ? $"({_settleDiscountValue}%)" : "")
+                                        </span>
+                                        <span style="color: #166534; font-weight: 800;">
+                                            يتم إنقاصها تلقائياً من إجمالي المطلوب وتوثيقها في قيود التسوية والسندات ✓
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Total Required, Payment Method, and Amount Received OR Customer Refund -->
+                <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+                    @if (_customerRefundAmount > 0)
+                    {
+                        <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span style="font-size: 1.6rem;">💰</span>
+                                    <div>
+                                        <div style="font-size: 0.8rem; color: #1e40af; font-weight: bold;">مبلغ مستحق للإرجاع والاسترداد للعميل:</div>
+                                        <div style="font-size: 1.45rem; font-weight: 900; color: #1d4ed8;">
+                                            @_customerRefundAmount.ToString("N0") ₪
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <label class="form-label" style="font-size: 0.82rem; margin: 0; font-weight: 800; color: #1e40af;">طريقة معالجة المسترد:</label>
+                                    <select class="form-control" style="font-weight: 700; font-size: 0.85rem; border-color: #60a5fa;" @bind="_refundAction">
+                                        <option value="CashRefund">💵 صرف المبلغ نقداً للعميل من الصندوق (كاش)</option>
+                                        <option value="CreditBalance">📋 إبقاء المبلغ كرصيد للعميل / خصم من ديونه السابقة</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            @if (_refundAction == "CashRefund")
+                            {
+                                <div style="background: #ffffff; border: 1px dashed #60a5fa; border-radius: 6px; padding: 8px 12px; font-size: 0.82rem; color: #1e40af; font-weight: 600;">
+                                    ℹ️ سيتم صرف (@_customerRefundAmount.ToString("N0") ₪) نقداً للعميل من درج الصندوق الحالي، وتسجيل سند صرف استرداد لتسوية العقد.
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="background: #ffffff; border: 1px dashed #16a34a; border-radius: 6px; padding: 8px 12px; font-size: 0.82rem; color: #166534; font-weight: 600;">
+                                    ℹ️ لن يتم إخراج أي نقد من الصندوق. سيتم قيد المبلغ كرصيد دائن للعميل أو إسقاطه من ديونه المسجلة تلقائياً.
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (_totalRequired > 0)
+                    {
+                        <div style="display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 12px; align-items: end;">
+                            <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 10px 14px;">
+                                <div style="font-size: 0.78rem; color: #166534; font-weight: bold;">إجمالي المستحق للتسوية والإغلاق:</div>
+                                <div style="font-size: 1.35rem; font-weight: 900; color: #0f172a; margin-top: 2px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+                                    <span>@_totalRequired.ToString("N0") ₪</span>
+                                    @if (_settleDiscountAmount > 0)
+                                    {
+                                        <span style="font-size: 0.76rem; color: #dc2626; font-weight: bold;">(بعد خصم @_settleDiscountAmount.ToString("N0") ₪)</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="form-label" style="font-size: 0.82rem; margin-bottom: 4px; font-weight: 800; color: #166534;">المبلغ المستلم الآن (₪):</label>
+                                <input type="number" class="form-control" style="font-weight: bold; font-size: 1.15rem; color: #16a34a; text-align: center;" @bind="_settlePayment" />
+                            </div>
+
+                            <div>
+                                <label class="form-label" style="font-size: 0.82rem; margin-bottom: 4px; font-weight: 800;">طريقة استلام المبلغ:</label>
+                                <select class="form-control" style="font-weight: 700; font-size: 0.86rem;" @bind="_settlePaymentMethod">
+                                    <option value="@PaymentMode.ImmediateCash">💵 نقداً فوراً (كاش)</option>
+                                    <option value="@PaymentMode.CreditCard">💳 بطاقة ائتمان / مدى</option>
+                                    <option value="@PaymentMode.BankTransfer">🏛️ تحويل بنكي</option>
+                                    <option value="@PaymentMode.DeferredOnReturn">📑 آجل / شيك (تسجيل ذمم)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Live Debt & Balance Banner -->
+                        @if (_totalRequired > _settlePayment)
+                        {
+                            <div style="background: #fffbeb; border: 1.5px solid #f59e0b; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; color: #92400e; font-size: 0.86rem;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 1.1rem;">⚠️</span>
+                                    <span>المبلغ المتبقي غير المسدد: <strong style="color: #b45309; font-size: 1.1rem;">@((_totalRequired - _settlePayment).ToString("N0")) ₪</strong></span>
+                                </div>
+                                <span style="background: #fef3c7; border: 1px solid #fcd34d; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 0.82rem;">
+                                    📌 يسجل تلقائياً كدين ذمة على حساب العميل (@_contractToClose.Customer?.FullName)
+                                </span>
+                            </div>
+                        }
+                        else if (_settlePayment > _totalRequired)
+                        {
+                            <div style="background: #eff6ff; border: 1.5px solid #93c5fd; border-radius: 8px; padding: 10px 14px; color: #1e40af; font-size: 0.86rem; font-weight: bold; display: flex; align-items: center; gap: 8px;">
+                                <span>ℹ️</span>
+                                <span>المبلغ المدفوع يتجاوز المطلوب بمقدار (@((_settlePayment - _totalRequired).ToString("N0")) ₪) - يعتبر دفعة إضافية أو رصيد مسترد للعميل.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 8px 14px; color: #166534; font-size: 0.84rem; font-weight: bold; display: flex; align-items: center; gap: 8px;">
+                                <span>✓</span>
+                                <span>سداد كامل للمبلغ المطلوب (0 ₪ ديون متبقية). سيتم تحرير المركبة وإلغاء حجز كمبيالة الضمان.</span>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 12px 16px; color: #166534; font-size: 0.9rem; font-weight: bold; display: flex; align-items: center; gap: 8px;">
+                            <span>✓</span>
+                            <span>تصفية كاملة ومثالية للمستحقات (0 ₪ مطلوب و 0 ₪ ديون متبقية). سيتم تحرير المركبة وإلغاء حجز كمبيالة الضمان.</span>
+                        </div>
+                    }
+                </div>
+
+                @if (!string.IsNullOrEmpty(_closeError))
+                {
+                    <div style="color: #ef4444; font-size: 0.86rem; font-weight: bold; padding: 6px 0;">
+                        ⚠️ @_closeError
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="filter-pill" @onclick="() => _contractToClose = null">إلغاء</button>
+                <button class="btn-primary-action" style="background: var(--accent-green); border-color: var(--accent-green);" @onclick="ConfirmCloseContract">
+                    تأكيد الاستلام والتسوية والإفراج عن الكمبيالة
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modals for New Contract, Extension, Inspection, and Print -->
+@if (_showNewContractModal)
+{
+    <NewContractModal OnContractCreated="LoadContracts" OnClose="() => _showNewContractModal = false" />
+}
+
+@if (_contractToExtend != null)
+{
+    <ExtendContractModal Contract="@_contractToExtend" OnExtended="OnContractExtended" OnClose="() => _contractToExtend = null" />
+}
+
+@if (_contractToInspect != null)
+{
+    <VehicleInspectionModal Contract="@_contractToInspect" 
+                           InitialType="@_inspectionInitialType"
+                           OnSaved="OnInspectionSaved" 
+                           OnClose="OnInspectionClosed" />
+}
+
+@if (_contractToPrint != null)
+{
+    <PrintDocumentModal Contract="@_contractToPrint" InitialTabContract="@_isContractTab" OnClose="() => _contractToPrint = null" />
+}
+
+@if (_voucherToPrint != null)
+{
+    <PrintVoucherModal Transaction="@_voucherToPrint" OnClose="() => _voucherToPrint = null" />
+}
+
+@if (_contractToPay != null)
+{
+    var due = _contractToPay.IsOpenEnded && _contractToPay.Status == ContractStatus.Active 
+        ? _contractToPay.OpenRentalCurrentDue 
+        : _contractToPay.RemainingAmount;
+    var totalRent = _contractToPay.IsOpenEnded && _contractToPay.Status == ContractStatus.Active 
+        ? _contractToPay.OpenRentalAccruedAmount 
+        : _contractToPay.TotalAgreedAmount;
+
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 580px;">
+            <div class="modal-header" style="background: #f0fdf4; border-bottom: 2px solid #16a34a;">
+                <div class="modal-title" style="color: #166534; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.3rem;">💰</span>
+                    <span>قبض دفعة نقدية وسند قبض (عقد رقم: @_contractToPay.ContractNumber)</span>
+                </div>
+                <button class="btn-close-modal" @onclick="() => _contractToPay = null">×</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+                <!-- Summary Card -->
+                <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.88rem;">
+                    <div><strong>العميل:</strong> @_contractToPay.Customer?.FullName</div>
+                    <div><strong>السيارة:</strong> @_contractToPay.Vehicle?.Brand @_contractToPay.Vehicle?.Model (@_contractToPay.Vehicle?.PlateNumber)</div>
+                    <div><strong>نوع العقد:</strong> @(_contractToPay.IsOpenEnded ? $"مفتوح ({_contractToPay.OpenRentalDays} يوم × {_contractToPay.DailyAgreedRate} ₪)" : $"محدد ({_contractToPay.RentalDays} يوم)")</div>
+                    <div><strong>إجمالي المستحق:</strong> <span style="font-weight: 800;">@totalRent.ToString("N0") ₪</span></div>
+                    <div><strong>المدفوع مسبقاً:</strong> <span style="font-weight: 800; color: #16a34a;">@_contractToPay.PaidAmount.ToString("N0") ₪</span></div>
+                    <div><strong>المتبقي / الذمم:</strong> <span style="font-weight: 900; color: #dc2626;">@due.ToString("N0") ₪</span></div>
+                </div>
+
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <label class="form-label" style="margin: 0; font-weight: 700;">المبلغ المقبوض الآن (₪) *:</label>
+                        @if (due > 0)
+                        {
+                            <button type="button" class="tool-btn-pill" style="font-size: 0.76rem; padding: 2px 8px; background: #dcfce7; color: #166534; border-color: #86efac;" @onclick="() => _contractPaymentAmount = due">
+                                ⚡ كامل المستحق (@due.ToString("N0") ₪)
+                            </button>
+                        }
+                    </div>
+                    <input type="number" class="form-control" @bind="_contractPaymentAmount" min="1" style="font-size: 1.25rem; font-weight: 900; color: #15803d;" placeholder="أدخل المبلغ..." />
+                    <span style="font-size: 0.78rem; color: #64748b; margin-top: 4px; display: block;">
+                        المتبقي على العقد بعد السداد: <strong style="color: var(--primary-blue);">@Math.Max(0, due - _contractPaymentAmount).ToString("N0") ₪</strong>
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" style="font-weight: 700;">طريقة القبض *:</label>
+                    <select class="form-control" @bind="_contractPaymentMode">
+                        <option value="@PaymentMode.ImmediateCash">💵 نقداً بالصندوق (Cash)</option>
+                        <option value="@PaymentMode.BankTransfer">🏦 تحويل بنكي</option>
+                        <option value="@PaymentMode.CreditCard">💳 بطاقة ائتمان / فيزا</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" style="font-weight: 700;">بيان / ملاحظات السند:</label>
+                    <input type="text" class="form-control" placeholder="مثال: دفعة على الحساب، سداد نفقات إيجار..." @bind="_contractPaymentNotes" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(_contractPaymentError))
+                {
+                    <div style="background: #fee2e2; color: #dc2626; border: 1.5px solid #ef4444; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 0.88rem;">
+                        ⚠️ @_contractPaymentError
+                    </div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button class="filter-pill" @onclick="() => _contractToPay = null">إلغاء</button>
+                <button class="btn-primary-action" style="background: #15803d; border-color: #166534; font-weight: 900;" @onclick="ConfirmContractPayment" disabled="@_isSubmittingContractPayment">
+                    <span>@(_isSubmittingContractPayment ? "جاري الحفظ والترحيل..." : "✓ حفظ وترحيل وطباعة سند القبض")</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_contractToCancel != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 540px;">
+            <div class="modal-header" style="background: #fee2e2; border-bottom: 2px solid #ef4444;">
+                <div class="modal-title" style="color: #991b1b; display: flex; align-items: center; gap: 8px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                    <span>إلغاء عقد التأجير بالكامل (فسخ العملية)</span>
+                </div>
+                <button class="btn-close-modal" @onclick="() => _contractToCancel = null">×</button>
+            </div>
+
+            <div class="modal-body" style="padding: 20px; font-size: 0.92rem; line-height: 1.6;">
+                <div style="background: #fef2f2; border: 1.5px solid #f87171; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+                    <div style="font-weight: 800; color: #991b1b; font-size: 1.05rem; margin-bottom: 4px;">
+                        هل أنت متأكد من رغبتك في إلغاء العقد (@_contractToCancel.ContractNumber)؟
+                    </div>
+                    <p style="color: #7f1d1d; margin: 0; font-size: 0.86rem;">
+                        هذا الخيار مخصص لإلغاء عملية التأجير بالكامل (مثال: العميل تراجع وبطل بده السيارة، ولا يؤخذ منه أي مبلغ ولا يترتب عليه أي التزامات).
+                    </p>
+                </div>
+
+                <div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; background: #fafafa; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; font-size: 0.88rem;">
+                    <div><strong>العميل المستأجر:</strong> @_contractToCancel.Customer?.FullName</div>
+                    <div><strong>المركبة:</strong> @_contractToCancel.Vehicle?.Brand @_contractToCancel.Vehicle?.Model (لوحة: <span style="font-family: monospace; font-weight: bold;">@_contractToCancel.Vehicle?.PlateNumber</span>)</div>
+                    <div><strong>الدفعة المقبوضة:</strong> <span style="font-weight: bold; color: var(--accent-green);">@_contractToCancel.PaidAmount.ToString("N0") ₪</span> (إلغاء قيد القبض بالكامل من الصندوق دون تسجيل أي حركة صرف سالبة)</div>
+                    <div><strong>الذمم المتبقية:</strong> <span style="font-weight: bold; color: var(--accent-red);">@_contractToCancel.RemainingAmount.ToString("N0") ₪</span> (سيتم إسقاطها بالكامل من ذمة العميل)</div>
+                    <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 8px 12px; color: #166534; font-size: 0.82rem; font-weight: bold; margin-top: 4px;">
+                        ✓ ضمان الصندوق: لن يتم ترصيد أي حركة سالبة أو سند صرف في الصندوق؛ كأن شيئاً لم يدخل ولم يخرج إطلاقاً.
+                    </div>
+                    <div style="color: #15803d; font-weight: bold;">✓ ستعود المركبة تلقائياً إلى الحالة (متاحة) للإيجار فوراً.</div>
+                    <div style="color: #15803d; font-weight: bold;">✓ سيتم الإفراج عن كمبيالة الضمان وإلغاؤها تلقائياً.</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">سبب الإلغاء (اختياري):</label>
+                    <input type="text" class="form-control" placeholder="مثال: رغبة العميل في إلغاء الحجز والعدول عن الإيجار" @bind="_cancellationReason" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(_cancelError))
+                {
+                    <div class="alert-banner error" style="margin-top: 10px;">@_cancelError</div>
+                }
+            </div>
+
+            <div class="modal-footer" style="background: #fafafa; display: flex; justify-content: space-between;">
+                <button class="filter-pill" @onclick="() => _contractToCancel = null" disabled="@_isCancelling">تراجع</button>
+                <button class="btn-primary-action" style="background: #dc2626; border-color: #b91c1c;" @onclick="ConfirmCancelContract" disabled="@_isCancelling">
+                    @if (_isCancelling)
+                    {
+                        <span>جاري الإلغاء...</span>
+                    }
+                    else
+                    {
+                        <span>تأكيد إلغاء العملية والفسخ</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Contract>? _contracts;
+    private ContractStatus? _statusFilter;
+    private string _searchQuery = "";
+    private bool _showNewContractModal = false;
+
+    private IEnumerable<Contract> FilteredContracts => _contracts?
+        .Where(c => string.IsNullOrWhiteSpace(_searchQuery) ||
+                    c.ContractNumber.ContainsArabic(_searchQuery) ||
+                    (c.Customer != null && c.Customer.FullName.ContainsArabic(_searchQuery)) ||
+                    (c.Customer != null && c.Customer.NationalIdOrPassport.ContainsArabic(_searchQuery)) ||
+                    (c.Vehicle != null && c.Vehicle.PlateNumber.ContainsArabic(_searchQuery)) ||
+                    (c.Vehicle != null && c.Vehicle.Brand.ContainsArabic(_searchQuery)) ||
+                    (c.Vehicle != null && c.Vehicle.Model.ContainsArabic(_searchQuery)) ||
+                    (c.PromissoryNoteNumber != null && c.PromissoryNoteNumber.ContainsArabic(_searchQuery)))
+        ?? Enumerable.Empty<Contract>();
+
+    private Contract? _contractToPrint;
+    private bool _isContractTab = true;
+
+    private Contract? _contractToExtend;
+    private Contract? _contractToInspect;
+    private Contract? _contractForReturn;
+    private InspectionType _inspectionInitialType = InspectionType.HandoverOut;
+    private FinancialTransaction? _voucherToPrint;
+
+    private Contract? _contractToClose;
+    private Contract? _contractToCancel;
+    private string? _cancellationReason;
+    private bool _isCancelling = false;
+    private string? _cancelError;
+
+    private Contract? _contractToPay;
+    private decimal _contractPaymentAmount = 0;
+    private PaymentMode _contractPaymentMode = PaymentMode.ImmediateCash;
+    private string _contractPaymentNotes = "";
+    private string? _contractPaymentError;
+    private bool _isSubmittingContractPayment = false;
+
+    private int _endOdometer;
+    private FuelLevel _endFuel = FuelLevel.Full;
+    private decimal _lateFee = 0;
+    private decimal _fuelFee = 0;
+    private decimal _extraKmFee = 0;
+    private decimal _damageFee = 0;
+    private string _settleDiscountType = "None"; // "None", "Percentage", "FixedAmount"
+    private decimal _settleDiscountValue = 0;
+    private decimal _settleDiscountAmount = 0;
+    private decimal _totalRequired = 0;
+    private decimal _settlePayment = 0;
+    private PaymentMode _settlePaymentMethod = PaymentMode.ImmediateCash;
+    private int _openRentalActualDays = 1;
+    private decimal _openRentalAccruedRent = 0;
+    private int _billedDays = 1;
+    private int _originalAgreedDays = 1;
+    private int _elapsedDays = 1;
+    private bool _isEarlyReturn = false;
+    private decimal _customerRefundAmount = 0;
+    private string _refundAction = "CashRefund"; // "CashRefund" or "CreditBalance"
+    private string? _settleNotes;
+    private string? _closeError;
+
+    private bool _isOverdue = false;
+    private int _overdueDays = 0;
+    private decimal _suggestedLateFee = 0;
+    private CompanyProfile? _companyProfile;
+
+    [SupplyParameterFromQuery] public Guid? CloseId { get; set; }
+    private List<Contract>? _allContractsForKpi;
+
+    private int TotalCount => _allContractsForKpi?.Count ?? _contracts?.Count ?? 0;
+    private int ActiveCount => _allContractsForKpi?.Count(c => c.Status == ContractStatus.Active) ?? _contracts?.Count(c => c.Status == ContractStatus.Active) ?? 0;
+    private int ClosedCount => _allContractsForKpi?.Count(c => c.Status == ContractStatus.Closed) ?? _contracts?.Count(c => c.Status == ContractStatus.Closed) ?? 0;
+    private int CancelledCount => _allContractsForKpi?.Count(c => c.Status == ContractStatus.Cancelled) ?? _contracts?.Count(c => c.Status == ContractStatus.Cancelled) ?? 0;
+    private int OverdueOrDueTodayCount => (_allContractsForKpi ?? _contracts)?.Count(c => c.Status == ContractStatus.Active && !c.IsOpenEnded && (c.ExpectedReturnDateTime <= DateTime.Now || c.ExpectedReturnDateTime.Date == DateTime.Today)) ?? 0;
+    private decimal ActiveTotalAgreedAmount => (_allContractsForKpi ?? _contracts)?.Where(c => c.Status == ContractStatus.Active).Sum(c => c.TotalAgreedAmount) ?? 0;
+    private decimal ActiveRemainingDebtAmount => (_allContractsForKpi ?? _contracts)?.Where(c => c.Status == ContractStatus.Active).Sum(c => c.RemainingAmount) ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        RentalService.OnContractsDataChanged += HandleContractsDataChanged;
+        _companyProfile = await RentalService.GetCompanyProfileAsync();
+        await LoadContracts();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (CloseId.HasValue && _contracts != null)
+        {
+            var target = _contracts.FirstOrDefault(c => c.Id == CloseId.Value);
+            if (target != null && target.Status == ContractStatus.Active)
+            {
+                var idToClose = CloseId.Value;
+                CloseId = null;
+                OpenCloseModal(target);
+            }
+        }
+    }
+
+    private async void HandleContractsDataChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadContracts();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        RentalService.OnContractsDataChanged -= HandleContractsDataChanged;
+    }
+
+    private async Task LoadContracts()
+    {
+        _contracts = await RentalService.GetContractsAsync(_statusFilter);
+        _allContractsForKpi = await RentalService.GetContractsAsync(null);
+
+        if (CloseId.HasValue && _contracts != null)
+        {
+            var target = _contracts.FirstOrDefault(c => c.Id == CloseId.Value);
+            if (target != null && target.Status == ContractStatus.Active)
+            {
+                CloseId = null;
+                OpenCloseModal(target);
+            }
+        }
+    }
+
+    private async Task SetFilter(ContractStatus? status)
+    {
+        _statusFilter = status;
+        await LoadContracts();
+    }
+
+    private void SendWhatsApp(Contract c)
+    {
+        try
+        {
+            var phone = c.Customer?.PrimaryPhone;
+            if (string.IsNullOrEmpty(phone)) return;
+
+            var diff = c.ExpectedReturnDateTime - DateTime.Now;
+            string timeStatus = diff.TotalSeconds > 0
+                ? $"متبقي على موعد التسليم {((int)diff.TotalHours)} ساعة و {diff.Minutes} دقيقة (بتاريخ {c.ExpectedReturnDateTime:yyyy/MM/dd hh:mm tt})."
+                : $"نود إعلامكم بأن موعد التسليم الرسمي قد انقضى منذ {Math.Abs((int)diff.TotalHours)} ساعة. يرجى مراجعة المكتب فوراً.";
+
+            var msg = $"✦ *شركة التـاج لتأجيـر السيـارات* (TAJ SYSTEM) ✦\n" +
+                      $"━━━━━━━━━━━━━━━━━━━━━\n" +
+                      $"مرحباً بك أخي الكريم: *{c.Customer?.FullName}*\n" +
+                      $"نود تذكيركم بموعد عقد تأجير المركبة: *{c.Vehicle?.Brand} {c.Vehicle?.Model}* (لوحة: *{c.Vehicle?.PlateNumber}*)\n" +
+                      $"رقم العقد: *{c.ContractNumber}*\n\n" +
+                      $"▪ {timeStatus}\n" +
+                      $"━━━━━━━━━━━━━━━━━━━━━\n" +
+                      $"☎ *خدمة العملاء:* 0566655550 | 0566009003";
+
+            WhatsAppHelper.OpenWhatsApp(phone, "970", msg);
+        }
+        catch { }
+    }
+
+    private void PrintDocument(Contract c, bool isContract)
+    {
+        _contractToPrint = c;
+        _isContractTab = isContract;
+    }
+
+    private async Task OnContractExtended()
+    {
+        _contractToExtend = null;
+        await LoadContracts();
+    }
+
+    private void StartReturnFlow(Contract c)
+    {
+        OpenCloseModal(c);
+    }
+
+    private void OpenInspectionModal(Contract c)
+    {
+        _contractForReturn = null;
+        _inspectionInitialType = c.Status == ContractStatus.Active ? InspectionType.ReturnIn : InspectionType.HandoverOut;
+        _contractToInspect = c;
+    }
+
+    private void InspectContractOnReturn(Contract c)
+    {
+        _contractForReturn = c;
+        _inspectionInitialType = InspectionType.ReturnIn;
+        _contractToInspect = c;
+    }
+
+    private async Task OnInspectionSaved()
+    {
+        var returnTarget = _contractForReturn;
+        _contractToInspect = null;
+        _contractForReturn = null;
+        await LoadContracts();
+
+        if (returnTarget != null)
+        {
+            var updated = await RentalService.GetContractByIdAsync(returnTarget.Id);
+            OpenCloseModal(updated ?? returnTarget);
+        }
+    }
+
+    private void OnInspectionClosed()
+    {
+        var returnTarget = _contractForReturn;
+        _contractToInspect = null;
+        _contractForReturn = null;
+
+        if (returnTarget != null && _contractToClose == null)
+        {
+            OpenCloseModal(returnTarget);
+        }
+    }
+
+    private void OpenPayContractModal(Contract c)
+    {
+        _contractToPay = c;
+        _contractPaymentAmount = c.IsOpenEnded && c.Status == ContractStatus.Active 
+            ? c.OpenRentalCurrentDue 
+            : c.RemainingAmount;
+        _contractPaymentMode = PaymentMode.ImmediateCash;
+        _contractPaymentNotes = "";
+        _contractPaymentError = null;
+        _isSubmittingContractPayment = false;
+    }
+
+    private async Task ConfirmContractPayment()
+    {
+        if (_contractToPay == null) return;
+        if (_contractPaymentAmount <= 0)
+        {
+            _contractPaymentError = "يرجى إدخال مبلغ صحيح أكبر من الصفر!";
+            return;
+        }
+
+        try
+        {
+            _isSubmittingContractPayment = true;
+            _contractPaymentError = null;
+            var staff = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username)
+                ? AuthState.CurrentUser.Username
+                : (!string.IsNullOrWhiteSpace(AuthState.CurrentUser.FullName) ? AuthState.CurrentUser.FullName : "admin");
+
+            var tx = await RentalService.RecordContractPaymentAsync(
+                _contractToPay.Id,
+                _contractPaymentAmount,
+                _contractPaymentMode,
+                _contractPaymentNotes,
+                staff);
+
+            _contractToPay = null;
+            _isSubmittingContractPayment = false;
+            await LoadContracts();
+            _voucherToPrint = tx;
+        }
+        catch (Exception ex)
+        {
+            _contractPaymentError = ex.InnerException?.Message ?? ex.Message;
+            _isSubmittingContractPayment = false;
+        }
+    }
+
+    private void OpenCloseModal(Contract c)
+    {
+        _contractToClose = c;
+        _closeError = null;
+        _settlePaymentMethod = PaymentMode.ImmediateCash;
+        _settleDiscountType = "None";
+        _settleDiscountValue = 0;
+        _settleDiscountAmount = 0;
+        _customerRefundAmount = 0;
+        _refundAction = "CashRefund";
+
+        var returnInsp = c.Inspections?.FirstOrDefault(i => i.Type == InspectionType.ReturnIn);
+        if (returnInsp != null)
+        {
+            _endOdometer = returnInsp.Odometer > 0 ? returnInsp.Odometer : (c.Vehicle?.CurrentOdometer ?? c.StartOdometer);
+            _endFuel = returnInsp.FuelLevel;
+            if (!string.IsNullOrWhiteSpace(returnInsp.DamageNotes) || !string.IsNullOrWhiteSpace(returnInsp.ScratchesDescription))
+            {
+                _settleNotes = returnInsp.DamageNotes ?? returnInsp.ScratchesDescription;
+            }
+
+            var newDamagesCount = returnInsp.GetDamageMarks().Count(m => m.InspectionPhase == "ReturnIn" && !m.IsRepaired);
+            if (newDamagesCount > 0 && _damageFee == 0)
+            {
+                _damageFee = newDamagesCount * 150;
+            }
+        }
+        else
+        {
+            _endOdometer = (c.Vehicle?.CurrentOdometer ?? c.StartOdometer);
+            _endFuel = c.FuelLevelStart;
+            _damageFee = 0;
+            _settleNotes = null;
+        }
+
+        _extraKmFee = 0;
+
+        if (c.IsOpenEnded)
+        {
+            _isOverdue = false;
+            _overdueDays = 0;
+            _suggestedLateFee = 0;
+            _lateFee = 0;
+            _isEarlyReturn = false;
+            _originalAgreedDays = 0;
+            _elapsedDays = Math.Max(1, (int)Math.Ceiling((DateTime.Now - c.StartDateTime).TotalDays));
+            _openRentalActualDays = _elapsedDays;
+            _billedDays = _openRentalActualDays;
+            _openRentalAccruedRent = _openRentalActualDays * c.DailyAgreedRate;
+        }
+        else
+        {
+            _openRentalActualDays = 0;
+            _openRentalAccruedRent = 0;
+            _originalAgreedDays = c.RentalDays;
+            _elapsedDays = Math.Max(1, (int)Math.Ceiling((DateTime.Now - c.StartDateTime).TotalDays));
+
+            var now = DateTime.Now;
+            if (now > c.ExpectedReturnDateTime)
+            {
+                _isOverdue = true;
+                _isEarlyReturn = false;
+                _overdueDays = Math.Max(1, (int)Math.Ceiling((now - c.ExpectedReturnDateTime).TotalDays));
+                _suggestedLateFee = _overdueDays * c.DailyAgreedRate;
+                _lateFee = _suggestedLateFee;
+                _billedDays = _originalAgreedDays;
+            }
+            else
+            {
+                _isOverdue = false;
+                _overdueDays = 0;
+                _suggestedLateFee = 0;
+                _lateFee = 0;
+
+                // فحص إذا كان استلام مبكر
+                if (_elapsedDays < _originalAgreedDays)
+                {
+                    _isEarlyReturn = true;
+                    _billedDays = _elapsedDays; // اقتراح المدة الفعلية المنقضية
+                }
+                else
+                {
+                    _isEarlyReturn = false;
+                    _billedDays = _originalAgreedDays;
+                }
+            }
+        }
+
+        OnOdometerOrFuelChanged();
+    }
+
+    private void IncrementBilledDays()
+    {
+        _billedDays++;
+        OnBilledDaysChanged();
+    }
+
+    private void DecrementBilledDays()
+    {
+        if (_billedDays > 1)
+        {
+            _billedDays--;
+            OnBilledDaysChanged();
+        }
+    }
+
+    private void SetBilledDays(int days)
+    {
+        _billedDays = Math.Max(1, days);
+        OnBilledDaysChanged();
+    }
+
+    private void OnBilledDaysChanged()
+    {
+        if (_billedDays < 1) _billedDays = 1;
+        OnOdometerOrFuelChanged();
+    }
+
+    private void SetSettleDiscountType(string type)
+    {
+        _settleDiscountType = type;
+        if (_settleDiscountType == "None")
+        {
+            _settleDiscountValue = 0;
+            _settleDiscountAmount = 0;
+        }
+        else if (_settleDiscountValue == 0)
+        {
+            _settleDiscountValue = _settleDiscountType == "Percentage" ? 10 : 50;
+        }
+        UpdateTotalRequired();
+    }
+
+    private void SetSettleDiscountPreset(decimal value)
+    {
+        _settleDiscountValue = value;
+        UpdateTotalRequired();
+    }
+
+    private void OnOdometerOrFuelChanged()
+    {
+        if (_contractToClose == null) return;
+
+        // حساب فرق الوقود التلقائي المقترح إن نقص
+        if (_endFuel < _contractToClose.FuelLevelStart)
+        {
+            var diff = (int)_contractToClose.FuelLevelStart - (int)_endFuel;
+            _fuelFee = diff * 40; // 40 ₪ لكل ربع خزان
+        }
+        else
+        {
+            _fuelFee = 0;
+        }
+
+        // حساب الكيلومترات الزائدة التلقائي المقترح وفق سياسة وإعدادات الشركة
+        var dailyLimit = _companyProfile?.DailyKmLimit > 0 ? _companyProfile.DailyKmLimit : 250;
+        var kmPrice = _companyProfile?.ExtraKmPrice > 0 ? _companyProfile.ExtraKmPrice : 1m;
+        var totalKm = Math.Max(0, _endOdometer - _contractToClose.StartOdometer);
+        var effectiveRentalDays = _contractToClose.IsOpenEnded ? _openRentalActualDays : _billedDays;
+        var allowedKm = effectiveRentalDays * dailyLimit;
+        if (totalKm > allowedKm)
+        {
+            _extraKmFee = (totalKm - allowedKm) * kmPrice;
+        }
+        else
+        {
+            _extraKmFee = 0;
+        }
+
+        UpdateTotalRequired();
+    }
+
+    private void UpdateTotalRequired()
+    {
+        if (_contractToClose == null) return;
+
+        decimal baseRentalRent;
+        if (_contractToClose.IsOpenEnded)
+        {
+            baseRentalRent = _openRentalActualDays * _contractToClose.DailyAgreedRate;
+            _openRentalAccruedRent = baseRentalRent;
+        }
+        else if (_isEarlyReturn || _billedDays != _originalAgreedDays)
+        {
+            baseRentalRent = _billedDays * _contractToClose.DailyAgreedRate;
+        }
+        else
+        {
+            baseRentalRent = _originalAgreedDays * _contractToClose.DailyAgreedRate;
+        }
+
+        var totalExtraFees = _lateFee + _fuelFee + _extraKmFee + _damageFee;
+        var grossTotal = baseRentalRent + totalExtraFees;
+
+        if (_settleDiscountType == "Percentage")
+        {
+            if (_settleDiscountValue > 100) _settleDiscountValue = 100;
+            _settleDiscountAmount = Math.Round((grossTotal * _settleDiscountValue) / 100m, 2);
+        }
+        else if (_settleDiscountType == "FixedAmount")
+        {
+            if (_settleDiscountValue > grossTotal) _settleDiscountValue = grossTotal;
+            _settleDiscountAmount = _settleDiscountValue;
+        }
+        else
+        {
+            _settleDiscountAmount = 0;
+            _settleDiscountValue = 0;
+        }
+
+        var netTotalContractCost = Math.Max(0, grossTotal - _settleDiscountAmount);
+
+        // مقارنة المطلوب الصافي مع ما دفعه الزبون مسبقاً
+        var alreadyPaid = _contractToClose.PaidAmount;
+
+        if (alreadyPaid > netTotalContractCost)
+        {
+            // الزبون دفع مقدماً أكثر من تكلفة الأيام المسحوبة (استرداد فرق تسليم مبكر أو خصم)
+            _customerRefundAmount = alreadyPaid - netTotalContractCost;
+            _totalRequired = 0;
+            _settlePayment = 0;
+        }
+        else
+        {
+            _customerRefundAmount = 0;
+            _totalRequired = netTotalContractCost - alreadyPaid;
+            _settlePayment = _totalRequired;
+        }
+    }
+
+    private async Task ConfirmCloseContract()
+    {
+        if (_contractToClose != null)
+        {
+            _closeError = null;
+            if (_endOdometer < _contractToClose.StartOdometer)
+            {
+                _closeError = $"قراءة العداد عند الإرجاع ({_endOdometer:N0} كم) لا يمكن أن تكون أقل من قراءة بداية العقد ({_contractToClose.StartOdometer:N0} كم)!";
+                return;
+            }
+
+            try
+            {
+                var staffIdentifier = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username) 
+                    ? AuthState.CurrentUser.Username 
+                    : AuthState.CurrentUser.FullName;
+
+                var finalNotes = _settleNotes;
+                if (_isEarlyReturn || (_billedDays != _originalAgreedDays && !_contractToClose.IsOpenEnded))
+                {
+                    var earlyNote = $"[تسليم مبكر: تم احتساب {_billedDays} يوم من أصل {_originalAgreedDays} يوم]";
+                    finalNotes = string.IsNullOrWhiteSpace(finalNotes) ? earlyNote : $"{earlyNote} - {finalNotes}";
+                }
+                if (_settleDiscountAmount > 0)
+                {
+                    var discLabel = _settleDiscountType == "Percentage" ? $"{_settleDiscountValue}%" : $"{_settleDiscountAmount:N0} ₪";
+                    var discNote = $"[خصم تسوية: {discLabel} (-{_settleDiscountAmount:N0} ₪)]";
+                    finalNotes = string.IsNullOrWhiteSpace(finalNotes) ? discNote : $"{finalNotes} - {discNote}";
+                }
+
+                bool refundFromDrawer = (_customerRefundAmount > 0 && _refundAction == "CashRefund");
+
+                await RentalService.CloseContractWithSettlementAsync(
+                    _contractToClose.Id, 
+                    _endOdometer, 
+                    _endFuel, 
+                    _lateFee, 
+                    _fuelFee, 
+                    _extraKmFee, 
+                    _damageFee, 
+                    _settlePayment, 
+                    finalNotes, 
+                    staffIdentifier,
+                    _settlePaymentMethod,
+                    _settleDiscountAmount,
+                    _billedDays,
+                    _customerRefundAmount,
+                    refundFromDrawer);
+
+                var closedId = _contractToClose.Id;
+                _contractToClose = null;
+                await LoadContracts();
+
+                // إتاحة طباعة إيصال السند
+                if (_settlePayment > 0)
+                {
+                    var trans = await RentalService.GetTransactionsAsync();
+                    _voucherToPrint = trans.FirstOrDefault(t => t.ContractId == closedId && t.Type == TransactionType.Receipt);
+                }
+            }
+            catch (Exception ex)
+            {
+                _closeError = ex.InnerException?.Message ?? ex.Message;
+            }
+        }
+    }
+
+    private void PromptCancelContract(Contract c)
+    {
+        _contractToCancel = c;
+        _cancellationReason = "بناءً على طلب ورغبة العميل (فسخ العملية)";
+        _cancelError = null;
+    }
+
+    private async Task ConfirmCancelContract()
+    {
+        if (_contractToCancel == null) return;
+        _isCancelling = true;
+        _cancelError = null;
+
+        try
+        {
+            var staffIdentifier = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username) 
+                ? AuthState.CurrentUser.Username 
+                : AuthState.CurrentUser.FullName;
+
+            await RentalService.CancelContractAsync(_contractToCancel.Id, staffIdentifier, _cancellationReason);
+            _contractToCancel = null;
+            await LoadContracts();
+        }
+        catch (Exception ex)
+        {
+            _cancelError = ex.InnerException?.Message ?? ex.Message;
+        }
+        finally
+        {
+            _isCancelling = false;
+        }
+    }
+
+    private void ExportContractsToExcel()
+    {
+        var headers = new[]
+        {
+            "رقم العقد", "حالة العقد", "اسم المستأجر", "رقم الهوية", "رقم الهاتف",
+            "السائق الإضافي", "المركبة", "رقم اللوحة", "تاريخ البدء", "تاريخ الإرجاع المتوقع",
+            "الأجرة اليومية", "إجمالي المبلغ", "المدفوع مقدماً", "المتبقي (ذمم)", "مبلغ الكمبيالة", "الموظف المنفذ"
+        };
+
+        var rows = FilteredContracts.Select(c => new object?[]
+        {
+            c.ContractNumber,
+            c.Status switch {
+                ContractStatus.Active => "نشط",
+                ContractStatus.Closed => "مغلق ومستلم",
+                ContractStatus.Cancelled => "ملغي",
+                _ => c.Status.ToString()
+            },
+            c.Customer?.FullName ?? "",
+            c.Customer?.NationalIdOrPassport ?? "",
+            c.Customer?.PrimaryPhone ?? "",
+            c.AdditionalDriverName ?? "لا يوجد",
+            $"{c.Vehicle?.Brand} {c.Vehicle?.Model}",
+            c.Vehicle?.PlateNumber ?? "",
+            c.StartDateTime.ToString("yyyy/MM/dd HH:mm"),
+            c.ExpectedReturnDateTime.ToString("yyyy/MM/dd HH:mm"),
+            c.DailyAgreedRate,
+            c.TotalAgreedAmount,
+            c.PaidAmount,
+            c.RemainingAmount,
+            c.PromissoryNoteAmount,
+            c.CreatedByStaffName
+        });
+
+        ExportHelper.ExportToCsv($"Contracts_Report_{DateTime.Now:yyyyMMdd_HHmm}.csv", headers, rows);
+    }
+}
+
+<style>
+    /* Contracts Executive KPIs */
+    .contracts-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        width: 100%;
+    }
+    .contracts-kpi-card {
+        background: #ffffff;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 14px 18px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+        transition: all 0.2s ease;
+    }
+    .contracts-kpi-card:hover {
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+        transform: translateY(-1px);
+    }
+    .kpi-blue { border-top: 3.5px solid #0284c7; }
+    .kpi-red { border-top: 3.5px solid #dc2626; background: #fffdfd; }
+    .kpi-green { border-top: 3.5px solid #10b981; }
+    .kpi-amber { border-top: 3.5px solid #f59e0b; background: #fffdfa; }
+
+    .contracts-kpi-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.35rem;
+        flex-shrink: 0;
+        background: #f1f5f9;
+    }
+    .kpi-blue .contracts-kpi-icon { background: #e0f2fe; }
+    .kpi-red .contracts-kpi-icon { background: #fee2e2; }
+    .kpi-green .contracts-kpi-icon { background: #dcfce7; }
+    .kpi-amber .contracts-kpi-icon { background: #fef3c7; }
+
+    .contracts-kpi-body {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .contracts-kpi-title {
+        font-size: 0.8rem;
+        color: #64748b;
+        font-weight: 700;
+    }
+    .contracts-kpi-val {
+        font-size: 1.35rem;
+        font-weight: 900;
+        color: #0f172a;
+        line-height: 1.1;
+    }
+
+    /* License Plate Badge */
+    .license-plate-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: #fde047;
+        color: #000000;
+        border: 1.5px solid #000000;
+        border-radius: 4px;
+        padding: 2px 7px;
+        font-family: monospace;
+        font-weight: 900;
+        font-size: 0.84rem;
+        letter-spacing: 0.5px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+
+    /* Contract Mono Badge */
+    .contract-code-pill {
+        display: inline-block;
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+        border-radius: 6px;
+        padding: 3px 8px;
+        font-family: monospace;
+        font-weight: 900;
+        font-size: 0.88rem;
+    }
+
+    /* WhatsApp Button */
+    .btn-wa-pill {
+        background: #dcfce7;
+        color: #15803d;
+        border: 1px solid #86efac;
+        border-radius: 12px;
+        padding: 2px 8px;
+        font-size: 0.74rem;
+        font-weight: 800;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        transition: all 0.15s ease;
+    }
+    .btn-wa-pill:hover {
+        background: #16a34a;
+        color: #ffffff;
+        border-color: #15803d;
+    }
+
+    /* Smart Actions Cell */
+    .smart-actions-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 175px;
+    }
+    .smart-primary-btns {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+    }
+    .btn-action-return {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: #ffffff;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-weight: 800;
+        font-size: 0.82rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+        transition: all 0.15s ease;
+        white-space: nowrap;
+    }
+    .btn-action-return:hover {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(16, 185, 129, 0.4);
+    }
+    .btn-action-payment {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+        color: #ffffff;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-weight: 800;
+        font-size: 0.82rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+        transition: all 0.15s ease;
+        white-space: nowrap;
+    }
+    .btn-action-payment:hover {
+        background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(2, 132, 199, 0.4);
+    }
+    .btn-action-extend {
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-weight: 800;
+        font-size: 0.8rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+    }
+    .btn-action-extend:hover {
+        background: #dbeafe;
+        border-color: #93c5fd;
+    }
+    .smart-tools-row {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    .tool-btn-pill {
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 5px;
+        padding: 3px 7px;
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: #334155;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+    }
+    .tool-btn-pill:hover {
+        background: #ffffff;
+        border-color: #94a3b8;
+        color: #0f172a;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .tool-btn-cancel {
+        color: #b91c1c;
+        border-color: #fecaca;
+        background: #fff5f5;
+    }
+    .tool-btn-cancel:hover {
+        background: #fee2e2;
+        border-color: #fca5a5;
+        color: #991b1b;
+    }
+
+    /* Status Badges */
+    .badge-status-active {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #ecfdf5;
+        color: #065f46;
+        border: 1.5px solid #a7f3d0;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-weight: 800;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+    .badge-status-closed {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #f1f5f9;
+        color: #475569;
+        border: 1.5px solid #cbd5e1;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-weight: 800;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+    .badge-status-cancelled {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #fef2f2;
+        color: #991b1b;
+        border: 1.5px solid #fecaca;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-weight: 800;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+
+    @@media (max-width: 1200px) {
+        .contracts-kpi-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+</style>

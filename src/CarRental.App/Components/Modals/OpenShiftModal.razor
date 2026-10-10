@@ -1,0 +1,460 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Interfaces
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+@inject IJSRuntime JSRuntime
+
+<div class="open-shift-overlay">
+    <div class="open-shift-card animate-scale-up">
+        <!-- Header -->
+        <div class="shift-modal-header">
+            <div class="shift-icon-circle">
+                <span style="font-size: 2.2rem;">💰</span>
+            </div>
+            <h2 class="shift-title">افتتاح الصندوق والوردية اليومية</h2>
+            <p class="shift-subtitle">مرحباً بك، <strong>@(AuthState.CurrentUser?.FullName ?? "الموظف")</strong>! للبدء بالعمل، يرجى تسجيل العهدة النقدية في الصندوق.</p>
+        </div>
+
+        <div class="shift-modal-body">
+            <!-- Question Box -->
+            <div class="question-banner">
+                <div class="question-icon">❓</div>
+                <div class="question-text">
+                    <strong>كم المبلغ المتواجد في الصندوق الآن؟</strong>
+                    <span>يرجى جرد النقدية الفعلية داخل درج الكاش لتسجيل العهدة الافتتاحية بدقة.</span>
+                </div>
+            </div>
+
+            <!-- Amount Input -->
+            <div class="amount-input-wrapper">
+                <label class="amount-label">العهدة النقدية الافتتاحية (شيكل ₪):</label>
+                <div class="input-currency-box">
+                    <input type="number" 
+                           class="opening-amount-field" 
+                           @bind="_openingBalance" 
+                           @onkeydown="HandleKeyDown"
+                           min="0" 
+                           step="10" 
+                           placeholder="0.00" 
+                           autofocus />
+                    <span class="currency-symbol">₪ شيكل</span>
+                </div>
+            </div>
+
+            <!-- Quick Amount Suggestion Chips -->
+            <div class="quick-chips-wrapper">
+                <span class="chips-label">مبالغ سريعة شائعة (انقر للتحديد):</span>
+                <div class="chips-row">
+                    <button type="button" class="quick-chip @(_openingBalance == 0 ? "active" : "")" @onclick="() => SetAmount(0)">
+                        0 ₪ (بدون عهدة)
+                    </button>
+                    <button type="button" class="quick-chip @(_openingBalance == 200 ? "active" : "")" @onclick="() => SetAmount(200)">
+                        200 ₪
+                    </button>
+                    <button type="button" class="quick-chip @(_openingBalance == 500 ? "active" : "")" @onclick="() => SetAmount(500)">
+                        500 ₪
+                    </button>
+                    <button type="button" class="quick-chip @(_openingBalance == 1000 ? "active" : "")" @onclick="() => SetAmount(1000)">
+                        1,000 ₪
+                    </button>
+                    <button type="button" class="quick-chip @(_openingBalance == 2000 ? "active" : "")" @onclick="() => SetAmount(2000)">
+                        2,000 ₪
+                    </button>
+                </div>
+            </div>
+
+            <!-- Meta details -->
+            <div class="shift-meta-grid">
+                <div class="meta-item">
+                    <span class="meta-label">الموظف المسؤول:</span>
+                    <span class="meta-val">@(AuthState.CurrentUser?.FullName ?? "المدير العام")</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">تاريخ ووقت الافتتاح:</span>
+                    <span class="meta-val" style="direction: ltr; font-family: monospace;">@DateTime.Now.ToString("yyyy/MM/dd • HH:mm")</span>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="shift-error-alert">
+                    <span>⚠️ @_errorMessage</span>
+                </div>
+            }
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="shift-modal-footer">
+            <button type="button" 
+                    class="btn-confirm-open" 
+                    @onclick="ConfirmOpenShift" 
+                    @disabled="_isSubmitting">
+                @if (_isSubmitting)
+                {
+                    <span>جاري الافتتاح والدخول...</span>
+                }
+                else
+                {
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span>✓ تأكيد العهدة وافتتاح الصندوق والدخول للنظام</span>
+                }
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .open-shift-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: radial-gradient(circle at 50% 35%, rgba(20, 15, 10, 0.88) 0%, rgba(10, 5, 2, 0.95) 100%);
+        backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 999999;
+        direction: rtl;
+        font-family: var(--font-family);
+        padding: 20px;
+        pointer-events: auto !important;
+    }
+
+    .open-shift-card {
+        background: #ffffff;
+        border: 2px solid var(--border-color);
+        border-radius: 24px;
+        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 520px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        pointer-events: auto !important;
+    }
+
+    .animate-scale-up {
+        animation: scaleUpIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @@keyframes scaleUpIn {
+        from { opacity: 0; transform: scale(0.92); }
+        to { opacity: 1; transform: scale(1); }
+    }
+
+    .shift-modal-header {
+        background: #fdfaf4;
+        border-bottom: 1.5px solid var(--border-color);
+        padding: 24px 28px 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 6px;
+    }
+
+    .shift-icon-circle {
+        width: 68px;
+        height: 68px;
+        border-radius: 50%;
+        background: #fef3c7;
+        border: 2.5px solid #fde047;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 6px;
+        box-shadow: 0 6px 18px rgba(217, 119, 6, 0.2);
+    }
+
+    .shift-title {
+        font-size: 1.35rem;
+        font-weight: 800;
+        color: var(--text-main);
+        margin: 0;
+    }
+
+    .shift-subtitle {
+        font-size: 0.88rem;
+        color: var(--text-muted);
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    .shift-modal-body {
+        padding: 22px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .question-banner {
+        background: #e0f2fe;
+        border: 1.5px solid #bae6fd;
+        border-radius: 14px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .question-icon {
+        font-size: 1.5rem;
+        line-height: 1;
+    }
+
+    .question-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .question-text strong {
+        font-size: 1rem;
+        color: #0369a1;
+        font-weight: 800;
+    }
+
+    .question-text span {
+        font-size: 0.8rem;
+        color: #0c4a6e;
+    }
+
+    .amount-input-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .amount-label {
+        font-size: 0.88rem;
+        font-weight: 800;
+        color: var(--text-main);
+    }
+
+    .input-currency-box {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .opening-amount-field {
+        width: 100%;
+        background: #faf8f5;
+        border: 2px solid var(--accent-gold);
+        border-radius: 14px;
+        padding: 14px 18px 14px 90px;
+        font-size: 1.65rem;
+        font-weight: 900;
+        color: var(--wood-walnut);
+        direction: ltr;
+        text-align: right;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.04);
+        outline: none;
+        transition: all 0.2s;
+    }
+
+    .opening-amount-field:focus {
+        background: #ffffff;
+        border-color: #0284c7;
+        box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.15);
+    }
+
+    .currency-symbol {
+        position: absolute;
+        left: 14px;
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: var(--text-muted);
+        pointer-events: none;
+        background: #f4ede1;
+        padding: 4px 10px;
+        border-radius: 8px;
+    }
+
+    .quick-chips-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .chips-label {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-muted);
+    }
+
+    .chips-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .quick-chip {
+        background: #fdfaf4;
+        border: 1.5px solid var(--border-color);
+        border-radius: 10px;
+        padding: 6px 12px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--text-main);
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .quick-chip:hover {
+        background: #ffffff;
+        border-color: var(--accent-gold);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(197, 155, 39, 0.15);
+    }
+
+    .quick-chip.active {
+        background: var(--accent-gold);
+        border-color: var(--accent-gold);
+        color: #ffffff;
+        font-weight: 800;
+    }
+
+    .shift-meta-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        background: #f8fafc;
+        border: 1px solid var(--border-subtle);
+        border-radius: 10px;
+        padding: 10px 14px;
+    }
+
+    .meta-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .meta-label {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        font-weight: 700;
+    }
+
+    .meta-val {
+        font-size: 0.82rem;
+        font-weight: 800;
+        color: var(--text-main);
+    }
+
+    .shift-error-alert {
+        background: #fee2e2;
+        border: 1.5px solid #ef4444;
+        border-radius: 10px;
+        padding: 8px 12px;
+        color: #991b1b;
+        font-size: 0.82rem;
+        font-weight: 700;
+        text-align: center;
+    }
+
+    .shift-modal-footer {
+        padding: 16px 28px 24px;
+        background: #ffffff;
+    }
+
+    .btn-confirm-open {
+        width: 100%;
+        background: linear-gradient(135deg, #15803d 0%, #16a34a 100%);
+        border: none;
+        border-radius: 14px;
+        padding: 14px 20px;
+        color: #ffffff;
+        font-size: 1.05rem;
+        font-weight: 800;
+        cursor: pointer !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        box-shadow: 0 6px 18px rgba(22, 163, 74, 0.28);
+        transition: all 0.2s ease;
+        user-select: none;
+    }
+
+    .btn-confirm-open:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 24px rgba(22, 163, 74, 0.38);
+        background: linear-gradient(135deg, #166534 0%, #15803d 100%);
+    }
+
+    .btn-confirm-open:disabled {
+        opacity: 0.65;
+        cursor: not-allowed !important;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public EventCallback OnShiftOpened { get; set; }
+
+    private decimal _openingBalance = 0;
+    private bool _isSubmitting = false;
+    private string? _errorMessage;
+
+    private void SetAmount(decimal val)
+    {
+        _openingBalance = val;
+        _errorMessage = null;
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ConfirmOpenShift();
+        }
+    }
+
+    private async Task ConfirmOpenShift()
+    {
+        if (_isSubmitting) return;
+
+        if (_openingBalance < 0)
+        {
+            _errorMessage = "لا يمكن أن يكون رصيد الصندوق الافتتاحي سالباً.";
+            return;
+        }
+
+        _isSubmitting = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var user = AuthState.CurrentUser;
+            var username = user?.Username ?? "admin";
+            var fullName = user?.FullName ?? "المدير العام";
+
+            await RentalService.OpenShiftAsync(username, fullName, _openingBalance);
+
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("carAudio.playNotification", "success");
+            }
+            catch { }
+
+            if (OnShiftOpened.HasDelegate)
+            {
+                await OnShiftOpened.InvokeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"حدث خطأ أثناء افتتاح الوردية: {ex.Message}";
+            _isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+}

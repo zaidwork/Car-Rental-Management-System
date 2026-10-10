@@ -1,0 +1,1391 @@
+@page "/fleet"
+@using CarRental.Core.Helpers
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+@implements IDisposable
+
+<div style="display: flex; flex-direction: column; gap: 20px;">
+    <!-- Top Bar -->
+    <div class="action-bar-strip">
+        <div class="action-bar-left">
+            <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--text-main);">إدارة الأسطول، التراخيص والصيانة (Fleet & Maintenance)</h2>
+            <span style="font-size: 0.84rem; color: var(--text-muted); font-weight: 500;">
+                نظام المراقبة الاستباقية للمركبات وتنبيهات انتهاء الرخص والتأمين والزيوت
+            </span>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <div class="search-input-box">
+                <input type="text" placeholder="بحث برقم اللوحة أو الموديل أو الشاسيه..." @bind="_searchQuery" @bind:event="oninput" />
+            </div>
+            @if (AuthState.IsAdmin)
+            {
+                <button class="btn-primary-action" @onclick="OpenAddVehicleModal">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    <span>إضافة سيارة للأسطول</span>
+                </button>
+            }
+        </div>
+    </div>
+
+    <!-- Vehicles Cards / Table View -->
+    <div class="data-table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>المركبة</th>
+                    <th>رقم اللوحة</th>
+                    <th>العداد الحالي</th>
+                    <th>حالة التشغيل</th>
+                    <th>ترخيص المركبة</th>
+                    <th>بوليصة التأمين</th>
+                    <th>موعد الصيانة المجدولة</th>
+                    <th>المؤشر الفني</th>
+                    <th>الإجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_vehicles != null && FilteredVehicles.Any())
+                {
+                    @foreach (var v in FilteredVehicles)
+                    {
+                        <tr>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    @if (!string.IsNullOrEmpty(v.ImageUrl))
+                                    {
+                                        <img src="@v.ImageUrl" alt="@v.Model" style="width: 54px; height: 36px; object-fit: contain; background: #fdfaf4; border-radius: 6px; padding: 2px; border: 1.5px solid var(--border-color); flex-shrink: 0;" />
+                                    }
+                                    else
+                                    {
+                                        <div style="width: 54px; height: 36px; background: #f3efe6; border-radius: 6px; border: 1.5px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0;">🚗</div>
+                                    }
+                                    <div>
+                                        <div style="font-weight: 800; color: var(--text-main); font-size: 0.95rem;">@v.Brand @v.Model</div>
+                                        <div style="font-size: 0.78rem; color: var(--text-muted); display: flex; gap: 8px; align-items: center;">
+                                            <span>موديل @v.ModelYear</span>
+                                            <span>•</span>
+                                            <span>@v.Color</span>
+                                            @if (v.ActiveDamagesCount > 0)
+                                            {
+                                                <span>•</span>
+                                                <span style="background: #fef3c7; color: #b45309; border: 1px solid #f59e0b; padding: 1px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 800;">
+                                                    ⚠️ @v.ActiveDamagesCount أضرار مسجلة
+                                                </span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <span style="font-family: monospace; font-weight: bold; background: #ede6d8; padding: 3px 8px; border-radius: 4px; color: var(--primary-blue); border: 1px solid var(--border-color);">
+                                    @v.PlateNumber
+                                </span>
+                            </td>
+                            <td style="font-weight: bold;">@v.CurrentOdometer.ToString("N0") كم</td>
+                            <td>
+                                @if (v.Status == VehicleStatus.Rented)
+                                {
+                                    <span style="background: #fee2e2; color: #dc2626; border: 1.5px solid #ef4444; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.8rem; box-shadow: 0 0 8px rgba(239, 68, 68, 0.35); display: inline-flex; align-items: center; gap: 4px;">
+                                        🔴 مؤجرة حالياً
+                                    </span>
+                                }
+                                else if (v.Status == VehicleStatus.InMaintenance || v.IsBlockedByCriticalMaintenance)
+                                {
+                                    <span style="background: #fee2e2; color: #b91c1c; border: 1.5px solid #ef4444; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 4px;">
+                                        ⛔ متوقفة بالصيانة (منع تأجير)
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span style="background: var(--accent-green-bg); color: var(--accent-green); border: 1px solid var(--accent-green-border); padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 0.78rem;">
+                                        ● متاحة للتأجير
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                @if (v.DaysUntilLicenseExpiry <= 0)
+                                {
+                                    <span style="color: var(--accent-red); font-weight: bold;">منتهي!</span>
+                                }
+                                else if (v.DaysUntilLicenseExpiry <= 20)
+                                {
+                                    <span style="color: var(--accent-orange); font-weight: bold;">ينتهي بعد @v.DaysUntilLicenseExpiry يوم</span>
+                                }
+                                else
+                                {
+                                    <span style="color: var(--accent-green);">ساري (@v.LicenseExpiryDate.ToString("yyyy/MM/dd"))</span>
+                                }
+                            </td>
+                            <td>
+                                @if (v.DaysUntilInsuranceExpiry <= 0)
+                                {
+                                    <span style="color: var(--accent-red); font-weight: bold;">منتهي!</span>
+                                }
+                                else if (v.DaysUntilInsuranceExpiry <= 20)
+                                {
+                                    <span style="color: var(--accent-orange); font-weight: bold;">ينتهي بعد @v.DaysUntilInsuranceExpiry يوم</span>
+                                }
+                                else
+                                {
+                                    <span style="color: var(--accent-green);">ساري (@v.InsuranceExpiryDate.ToString("yyyy/MM/dd"))</span>
+                                }
+                            </td>
+                            <td>
+                                <div style="font-size: 0.82rem;">
+                                    @if (v.NextMaintenanceDate != default && v.NextMaintenanceDate.Year > 2000)
+                                    {
+                                        if (v.DaysUntilMaintenance <= 0)
+                                        {
+                                            <span style="color: var(--accent-red); font-weight: bold;">🚨 مستحق فوراً! (@Math.Abs(v.DaysUntilMaintenance) يوم تجاوز)</span>
+                                        }
+                                        else if (v.DaysUntilMaintenance <= 14)
+                                        {
+                                            <span style="color: var(--accent-orange); font-weight: bold;">⚠️ متبقي @v.DaysUntilMaintenance يوم (@v.NextMaintenanceDate.ToString("yyyy/MM/dd"))</span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color: var(--accent-green); font-weight: 600;">📅 @v.NextMaintenanceDate.ToString("yyyy/MM/dd") (باقي @v.DaysUntilMaintenance يوم)</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span style="color: var(--text-muted);">غير محدد</span>
+                                    }
+                                </div>
+                            </td>
+                            <td>
+                                @if (v.AlertLevel == "danger")
+                                {
+                                    <span style="background: var(--accent-red); color: #fff; padding: 3px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: bold;">
+                                        🔴 إيقاف / حرج
+                                    </span>
+                                }
+                                else if (v.AlertLevel == "warning")
+                                {
+                                    <span style="background: var(--accent-orange); color: #fff; padding: 3px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: bold;">
+                                        🟡 تنبيه صيانة
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span style="background: var(--accent-green); color: #fff; padding: 3px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: bold;">
+                                        🟢 جاهزية تامة
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                <div style="display: flex; gap: 6px; align-items: center;">
+                                    @if (v.Status == VehicleStatus.Available && !v.IsBlockedByCriticalMaintenance)
+                                    {
+                                        <button class="btn-primary-action" style="padding: 5px 11px; font-size: 0.78rem; font-weight: 800; gap: 4px; height: auto; border-radius: 6px; background: #059669; border: 1px solid #047857; color: #ffffff;" title="فتح عقد تأجير مباشر لهذه السيارة" @onclick="() => OpenRentalForVehicle(v)">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                            </svg>
+                                            <span>+ تأجير</span>
+                                        </button>
+                                    }
+                                    <button class="btn-primary-action" style="padding: 5px 11px; font-size: 0.78rem; font-weight: 800; gap: 5px; height: auto; border-radius: 6px; background: #0284c7; border: 1px solid #0284c7; color: #ffffff;" title="فتح ملف الصيانة والرقابة الفنية للمركبة" @onclick="() => OpenMaintenanceProfileModal(v)">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                                        </svg>
+                                        <span>ملف الصيانة</span>
+                                    </button>
+                                    <button class="btn-primary-action" style="padding: 5px 11px; font-size: 0.78rem; font-weight: 800; gap: 5px; height: auto; border-radius: 6px; background: #059669; border: 1px solid #059669; color: #ffffff;" title="فتح الملف المالي وسجل النفقات والإيرادات للسيارة" @onclick="() => OpenVehicleFinancialModal(v)">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="12" y1="1" x2="12" y2="23"></line>
+                                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                        </svg>
+                                        <span>الملف المالي 💰</span>
+                                    </button>
+                                    <button class="btn-primary-action" style="padding: 5px 11px; font-size: 0.78rem; font-weight: 800; gap: 5px; height: auto; border-radius: 6px; background: #d97706; border: 1px solid #d97706; color: #ffffff;" title="كشف حالة المركبة ورسم وفحص الخدوش والضربات" @onclick="() => OpenVehicleConditionModal(v)">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                        </svg>
+                                        <span>حالة السيارة @(v.ActiveDamagesCount > 0 ? $"({v.ActiveDamagesCount})" : "")</span>
+                                    </button>
+                                    @if (AuthState.IsAdmin)
+                                    {
+                                        <button class="icon-btn-subtle" title="تعديل بيانات وصورة السيارة" @onclick="() => OpenEditVehicleModal(v)">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                            </svg>
+                                        </button>
+                                        <button class="icon-btn-subtle" style="color: #dc2626; border-color: rgba(220, 38, 38, 0.3);" title="حذف المركبة من الأسطول" @onclick="() => PromptDeleteVehicle(v)">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <polyline points="3 6 5 6 21 6"></polyline>
+                                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                                            </svg>
+                                        </button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="9" style="text-align: center; padding: 45px 20px;">
+                            <div class="empty-state-card" style="border: none; background: transparent; padding: 10px; margin: 0 auto;">
+                                <div class="empty-state-icon">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C1.4 11.2 1 12 1 13v3c0 .6.4 1 1 1h2"/>
+                                        <circle cx="7" cy="17" r="2"/>
+                                        <path d="M9 17h6"/>
+                                        <circle cx="17" cy="17" r="2"/>
+                                    </svg>
+                                </div>
+                                <div class="empty-state-title">لا توجد مركبات في أسطول النظام حتى الآن</div>
+                                <div class="empty-state-sub">النظام نظيف وجاهز لاستقبال بيانات سياراتك وتراخيصها وتواريخ صيانتها.</div>
+                                @if (AuthState.IsAdmin)
+                                {
+                                    <button class="btn-primary-action" @onclick="OpenAddVehicleModal" style="margin-top: 10px;">
+                                        + إضافة أول سيارة للأسطول
+                                    </button>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Add / Edit Vehicle -->
+@if (_showAddModal)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 740px; width: 95%;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary-blue)" stroke-width="2">
+                        <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C1.4 11.2 1 12 1 13v3c0 .6.4 1 1 1h2"/>
+                        <circle cx="7" cy="17" r="2"/>
+                        <path d="M9 17h6"/>
+                        <circle cx="17" cy="17" r="2"/>
+                    </svg>
+                    <span>@(_isEditingExistingVehicle ? $"تعديل بيانات وصورة المركبة ({_newVehicle.Brand} {_newVehicle.Model})" : "إضافة مركبة جديدة للأسطول")</span>
+                </div>
+                <button class="btn-close-modal" @onclick="() => _showAddModal = false">×</button>
+            </div>
+            <div class="modal-body" style="overflow-x: hidden;">
+                <!-- قسم رفع واختيار صورة المركبة -->
+                <div style="background: #fdfaf4; border: 1.5px solid var(--border-color); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+                    <label class="form-label" style="font-weight: 800; color: var(--text-main); display: flex; align-items: center; justify-content: space-between; margin: 0;">
+                        <span>📸 صورة المركبة (للتعرف السريع):</span>
+                        <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted);">حفظ محلي فوري (Offline)</span>
+                    </label>
+
+                    <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                        <!-- إطار المعاينة -->
+                        <div style="width: 130px; height: 85px; background: #ffffff; border: 1.5px dashed var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+                            @if (!string.IsNullOrEmpty(_newVehicle.ImageUrl))
+                            {
+                                <img src="@_newVehicle.ImageUrl" alt="Car Preview" style="width: 100%; height: 100%; object-fit: contain; padding: 4px;" />
+                            }
+                            else
+                            {
+                                <div style="text-align: center; color: var(--text-muted);">
+                                    <div style="font-size: 2rem;">🚗</div>
+                                    <div style="font-size: 0.72rem; font-weight: 700;">لا توجد صورة</div>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- أدوات الرفع والاختيار -->
+                        <div style="display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 220px;">
+                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                <label for="car-photo-upload" class="btn-primary-action" style="padding: 7px 16px; font-size: 0.84rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                    <span>رفع صورة من جهازك</span>
+                                </label>
+                                <InputFile id="car-photo-upload" OnChange="HandleVehiclePhotoUpload" accept="image/*" style="display: none;" />
+
+                                @if (!string.IsNullOrEmpty(_newVehicle.ImageUrl))
+                                {
+                                    <button type="button" class="filter-pill" style="color: var(--accent-red); border-color: #fca5a5; font-size: 0.82rem; padding: 6px 12px;" @onclick="() => _newVehicle.ImageUrl = string.Empty">
+                                        إزالة الصورة
+                                    </button>
+                                }
+                            </div>
+
+                            <div>
+                                <span style="font-size: 0.76rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">أو اختر صورة من أسطول المكتب السريع:</span>
+                                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/accent_white.jpg") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/accent_white.jpg"'>
+                                        🚗 أكسنت أبيض
+                                    </button>
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/accent_smart.jpg") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/accent_smart.jpg"'>
+                                        ✨ أكسنت بصمة
+                                    </button>
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/accent_61.jpg") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/accent_61.jpg"'>
+                                        🚙 أكسنت 61
+                                    </button>
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/accent_red.webp") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/accent_red.webp"'>
+                                        🚗 أكسنت أحمر
+                                    </button>
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/kia_sportage.jpg") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/kia_sportage.jpg"'>
+                                        ⚡ سبورتاج
+                                    </button>
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/kia_stonic.jpg") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/kia_stonic.jpg"'>
+                                        🌟 ستونيك
+                                    </button>
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/kia_picanto.png") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/kia_picanto.png"'>
+                                        🚘 بيكانتو
+                                    </button>
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/venue_grey.webp") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/venue_grey.webp"'>
+                                        🔘 فينيو رمادي
+                                    </button>
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/venue_navy.jpg") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/venue_navy.jpg"'>
+                                        🔵 فينيو كحلي
+                                    </button>
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/venue_black.webp") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/venue_black.webp"'>
+                                        ⚫ فينيو أسود
+                                    </button>
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/venue_burgundy.jpg") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/venue_burgundy.jpg"'>
+                                        🟣 فينيو خمري
+                                    </button>
+                                    <button type="button" class="filter-pill @(IsImageSelected("/images/cars/venue_red.webp") ? "active" : "")" style="font-size: 0.75rem; padding: 4px 8px;" @onclick='() => _newVehicle.ImageUrl = "/images/cars/venue_red.webp"'>
+                                        🔴 فينيو أحمر
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">الشركة المصنعة (Brand) *:</label>
+                        <input type="text" class="form-control" @bind="_newVehicle.Brand" placeholder="Toyota, Hyundai, Tesla..." />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">الطراز (Model) *:</label>
+                        <input type="text" class="form-control" @bind="_newVehicle.Model" placeholder="Camry, Elantra, Model 3..." />
+                    </div>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">سنة الصنع:</label>
+                        <input type="number" class="form-control" @bind="_newVehicle.ModelYear" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">اللون:</label>
+                        <input type="text" class="form-control" @bind="_newVehicle.Color" placeholder="أبيض، أسود، فضي..." />
+                    </div>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">رقم اللوحة *:</label>
+                        <input type="text" class="form-control" @bind="_newVehicle.PlateNumber" placeholder="مثال: 512 أو أ ب ج 1234" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">رقم الشاسيه (VIN):</label>
+                        <input type="text" class="form-control" @bind="_newVehicle.VinNumber" placeholder="17 حرف ورقم..." />
+                    </div>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">قراءة العداد الحالية (كم):</label>
+                        <input type="number" class="form-control" @bind="_newVehicle.CurrentOdometer" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">السعر الاسترشادي اليومي (₪):</label>
+                        <input type="number" class="form-control" @bind="_newVehicle.DailyStandardRate" />
+                    </div>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">تاريخ انتهاء ترخيص المركبة:</label>
+                        <input type="date" class="form-control" @bind="_newVehicle.LicenseExpiryDate" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">تاريخ انتهاء التأمين:</label>
+                        <input type="date" class="form-control" @bind="_newVehicle.InsuranceExpiryDate" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">شركة التأمين:</label>
+                    <input type="text" class="form-control" @bind="_newVehicle.InsuranceCompany" placeholder="شركة التأمين المعتمدة..." />
+                </div>
+
+                @if (!string.IsNullOrEmpty(_modalError))
+                {
+                    <div style="color: #ef4444; font-weight: bold; font-size: 0.88rem; padding: 4px 0;">
+                        @_modalError
+                    </div>
+                }
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    @if (_isEditingExistingVehicle && AuthState.IsAdmin)
+                    {
+                        <button type="button" class="btn-primary-action" style="background: #dc2626; border-color: #b91c1c; color: white;" @onclick="PromptDeleteVehicleFromModal">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                            <span>حذف هذه المركبة</span>
+                        </button>
+                    }
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="filter-pill" @onclick="() => _showAddModal = false">إلغاء</button>
+                    <button class="btn-primary-action" @onclick="SaveNewVehicle">
+                        @(_isEditingExistingVehicle ? "حفظ التعديلات وتحديث السيارة" : "إضافة المركبة وحفظها بالأسطول")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal: Comprehensive Vehicle Maintenance Profile (ملف صيانة السيارة والرقابة الفنية) -->
+@if (_selectedVehicleForProfile != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 860px; width: 96%; max-height: 94vh;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #ede7da 0%, #e2d9c7 100%);">
+                <div class="modal-title" style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 8px; background: #0284c7; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);">
+                        🛠️
+                    </div>
+                    <div>
+                        <div style="font-size: 1.1rem; font-weight: 800; color: var(--text-main);">
+                            ملف الصيانة والرقابة الفنية: @_selectedVehicleForProfile.Brand @_selectedVehicleForProfile.Model (@_selectedVehicleForProfile.ModelYear)
+                        </div>
+                        <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">
+                            رقم اللوحة: <span style="color: var(--primary-blue); font-weight: 800;">@_selectedVehicleForProfile.PlateNumber</span> | العداد الحالي: <span style="font-weight: 800; color: var(--text-main);">@_selectedVehicleForProfile.CurrentOdometer.ToString("N0") كم</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn-close-modal" @onclick="CloseMaintenanceProfileModal">×</button>
+            </div>
+
+            <!-- Profile Navigation Tabs -->
+            <div style="display: flex; background: #f9f6f0; border-bottom: 1.5px solid var(--border-color); padding: 8px 16px; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="filter-pill @(_activeProfileTab == "overview" ? "active" : "")" style="font-weight: 800; font-size: 0.85rem; padding: 7px 16px;" @onclick='() => _activeProfileTab = "overview"'>
+                    ⚡ الحالة، الإيقاف والجدولة الحرجة
+                </button>
+                <button type="button" class="filter-pill @(_activeProfileTab == "confirm" ? "active" : "")" style="font-weight: 800; font-size: 0.85rem; padding: 7px 16px;" @onclick='() => _activeProfileTab = "confirm"'>
+                    🛠️ تأكيد إنجاز الصيانة (فك الحظر)
+                </button>
+                <button type="button" class="filter-pill @(_activeProfileTab == "history" ? "active" : "")" style="font-weight: 800; font-size: 0.85rem; padding: 7px 16px;" @onclick='() => _activeProfileTab = "history"'>
+                    📋 سجل وتاريخ الصيانات (@_vehicleHistory.Count)
+                </button>
+            </div>
+
+            <div class="modal-body" style="padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;">
+                <!-- Feedback Alerts -->
+                @if (!string.IsNullOrEmpty(_profileMessage))
+                {
+                    <div style="background: #d1fae5; border: 1.5px solid #6ee7b7; color: #065f46; border-radius: 8px; padding: 10px 14px; font-weight: 700; font-size: 0.88rem; display: flex; align-items: center; gap: 8px;">
+                        <span>✅</span>
+                        <span>@_profileMessage</span>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(_profileError))
+                {
+                    <div style="background: #fee2e2; border: 1.5px solid #fca5a5; color: #991b1b; border-radius: 8px; padding: 10px 14px; font-weight: 700; font-size: 0.88rem; display: flex; align-items: center; gap: 8px;">
+                        <span>⚠️</span>
+                        <span>@_profileError</span>
+                    </div>
+                }
+
+                <!-- Status Banner for Critical Maintenance Lockout -->
+                @if (_selectedVehicleForProfile.IsBlockedByCriticalMaintenance)
+                {
+                    <div style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);">
+                        <div style="font-size: 1.8rem; line-height: 1;">⛔</div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 800; color: #b91c1c; font-size: 0.95rem;">
+                                تنبيه أمان صارم: المركبة موقوفة تلقائياً وممنوعة تماماً من التأجير!
+                            </div>
+                            <div style="font-size: 0.84rem; color: #7f1d1d; margin-top: 2px;">
+                                السبب: بلغت المركبة حد الصيانة الحرجة الإلزامية (@(_selectedVehicleForProfile.CriticalMaintenanceReason ?? "صيانة إلزامية دورية")). لن يقبل النظام فتح أي عقد تأجير للمركبة حتى يتم تأكيد إنجاز الصيانة بنجاح.
+                            </div>
+                        </div>
+                    </div>
+                }
+                else if (_selectedVehicleForProfile.Status == VehicleStatus.InMaintenance)
+                {
+                    <div style="background: #fffbeb; border: 1.5px solid #f59e0b; border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 12px;">
+                        <div style="font-size: 1.8rem; line-height: 1;">⚠️</div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 800; color: #92400e; font-size: 0.95rem;">
+                                المركبة متوقفة في الصيانة حالياً وممنوعة من التأجير
+                            </div>
+                            <div style="font-size: 0.84rem; color: #b45309; margin-top: 2px;">
+                                السبب: @(_selectedVehicleForProfile.CriticalMaintenanceReason ?? "إيقاف يدوي للصيانة والرقابة")
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <!-- TAB 1: OVERVIEW, INSTANT HALT & CRITICAL SCHEDULING -->
+                @if (_activeProfileTab == "overview")
+                {
+                    <!-- Section A: Overview & Operational Controls -->
+                    <div style="background: #fdfaf4; border: 1.5px solid var(--border-color); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div style="font-weight: 800; color: var(--text-main); font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+                                <span>🕹️ التحكم بحالة التشغيل ومنع التأجير:</span>
+                            </div>
+                            <div>
+                                @if (_selectedVehicleForProfile.Status == VehicleStatus.Rented)
+                                {
+                                    <span style="background: #fee2e2; color: #dc2626; border: 1.5px solid #ef4444; padding: 4px 12px; border-radius: 6px; font-weight: 800; font-size: 0.82rem;">
+                                        🔴 مؤجرة بعقد نشط
+                                    </span>
+                                }
+                                else if (_selectedVehicleForProfile.Status == VehicleStatus.InMaintenance || _selectedVehicleForProfile.IsBlockedByCriticalMaintenance)
+                                {
+                                    <span style="background: #fee2e2; color: #b91c1c; border: 1.5px solid #ef4444; padding: 4px 12px; border-radius: 6px; font-weight: 800; font-size: 0.82rem;">
+                                        ⛔ متوقفة بالصيانة (ممنوعة من التأجير)
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span style="background: var(--accent-green-bg); color: var(--accent-green); border: 1.5px solid var(--accent-green-border); padding: 4px 12px; border-radius: 6px; font-weight: 800; font-size: 0.82rem;">
+                                        🟢 صالحة ومتاحة للتأجير الفوري
+                                    </span>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Instant Action Buttons -->
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                            @if (_selectedVehicleForProfile.Status == VehicleStatus.Available)
+                            {
+                                @if (!_showHaltReasonInput)
+                                {
+                                    <button class="btn-primary-action" style="background: #dc2626; border-color: #dc2626; font-size: 0.85rem;" @onclick="() => _showHaltReasonInput = true">
+                                        ⛔ إيقاف المركبة فوراً ومنع التأجير (تحويل لصيانة)
+                                    </button>
+                                }
+                                else
+                                {
+                                    <div style="display: flex; gap: 8px; align-items: center; width: 100%; background: #ffffff; padding: 10px; border-radius: 8px; border: 1px dashed #ef4444;">
+                                        <input type="text" class="form-control" placeholder="سبب الإيقاف (عطل بالمكابح، صوت غير طبيعي، صيانة عاجلة...)" @bind="_haltReason" style="flex: 1;" />
+                                        <button class="btn-primary-action" style="background: #dc2626; border-color: #dc2626; padding: 7px 14px;" @onclick="() => ToggleHalt(true)">
+                                            تأكيد الإيقاف الفوري
+                                        </button>
+                                        <button class="filter-pill" @onclick="() => { _showHaltReasonInput = false; _haltReason = string.Empty; }">
+                                            إلغاء
+                                        </button>
+                                    </div>
+                                }
+                            }
+                            else if (_selectedVehicleForProfile.Status == VehicleStatus.InMaintenance)
+                            {
+                                @if (!_selectedVehicleForProfile.IsBlockedByCriticalMaintenance)
+                                {
+                                    <button class="btn-primary-action" style="background: #059669; border-color: #059669; font-size: 0.85rem;" @onclick="() => ToggleHalt(false)">
+                                        ✅ فك الإيقاف وإتاحة المركبة للتأجير
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span style="font-size: 0.82rem; color: #b91c1c; font-weight: 700;">
+                                        🔒 لا يمكن فك الإيقاف مباشرة لأن عداد أو موعد الصيانة الحرجة مستحق! انتقل لتبويب "تأكيد إنجاز الصيانة" لإعادتها للخدمة.
+                                    </span>
+                                }
+                            }
+
+                            <button class="filter-pill" style="font-size: 0.85rem; font-weight: 800; color: var(--primary-blue); border-color: var(--primary-blue); margin-right: auto;" @onclick='() => _activeProfileTab = "confirm"'>
+                                🛠️ الانتقال لتأكيد إنجاز الصيانة
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Section B: Critical Maintenance Schedule Configuration -->
+                    <div style="background: #ffffff; border: 1.5px solid var(--border-color); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+                        <div style="font-weight: 800; color: var(--text-main); font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+                            <span>⚙️ إعدادات الصيانة والحد الحرج الإلزامي (Critical Maintenance Lockout):</span>
+                        </div>
+                        <div style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.5;">
+                            يعتمد النظام على <strong>التاريخ والمدة المحددة</strong> من الإدارة أو المالية لجدولة الصيانة وتوليد الإشعارات التلقائية. عند تفعيل خيار <strong style="color: #b91c1c;">"صيانة حرجة"</strong>، سيقوم النظام تلقائياً بإيقاف المركبة ومنع إنشاء أي عقد تأجير لها فور حلول هذا التاريخ حتى يتم تأكيد إنجاز الصيانة.
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" style="font-weight: 700; font-size: 0.92rem;">تاريخ موعد استحقاق الصيانة القادم *:</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="date" class="form-control" @bind="_editNextDueDate" style="font-size: 0.95rem; font-weight: 700;" />
+                                @if (_editNextDueDate.HasValue)
+                                {
+                                    var days = (_editNextDueDate.Value.Date - DateTime.Today).Days;
+                                    if (days < 0)
+                                    {
+                                        <span style="color: var(--accent-red); font-weight: 800; background: #fee2e2; padding: 6px 12px; border-radius: 6px; font-size: 0.82rem; white-space: nowrap;">
+                                            🚨 متأخر منذ @Math.Abs(days) يوم!
+                                        </span>
+                                    }
+                                    else if (days <= 14)
+                                    {
+                                        <span style="color: #c2410c; font-weight: 800; background: #ffedd5; padding: 6px 12px; border-radius: 6px; font-size: 0.82rem; white-space: nowrap;">
+                                            ⚠️ متبقي @days يوم
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color: var(--accent-green); font-weight: 800; background: #ecfdf5; padding: 6px 12px; border-radius: 6px; font-size: 0.82rem; white-space: nowrap;">
+                                            ✅ متبقي @days يوم
+                                        </span>
+                                    }
+                                }
+                            </div>
+                            <!-- Quick Duration Presets for Management / Finance -->
+                            <div style="display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap;">
+                                <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: 700;">تحديد سريع للمدة:</span>
+                                <button type="button" class="filter-pill" style="font-size: 0.76rem; padding: 3px 10px;" @onclick="() => SetScheduleDurationMonths(1)">+ شهر واحد</button>
+                                <button type="button" class="filter-pill" style="font-size: 0.76rem; padding: 3px 10px;" @onclick="() => SetScheduleDurationMonths(2)">+ شهرين</button>
+                                <button type="button" class="filter-pill" style="font-size: 0.76rem; padding: 3px 10px;" @onclick="() => SetScheduleDurationMonths(3)">+ 3 أشهر</button>
+                                <button type="button" class="filter-pill" style="font-size: 0.76rem; padding: 3px 10px;" @onclick="() => SetScheduleDurationMonths(6)">+ 6 أشهر</button>
+                                <button type="button" class="filter-pill" style="font-size: 0.76rem; padding: 3px 10px;" @onclick="() => SetScheduleDurationMonths(12)">+ سنة كاملة</button>
+                            </div>
+                        </div>
+
+                        <!-- Checkbox for Critical Maintenance -->
+                        <div style="background: #fff8eb; border: 1.5px solid #f59e0b; border-radius: 8px; padding: 12px; display: flex; align-items: flex-start; gap: 12px;">
+                            <input type="checkbox" id="criticalMaintCheck" @bind="_editIsCritical" style="width: 20px; height: 20px; accent-color: #dc2626; cursor: pointer; margin-top: 2px;" />
+                            <label for="criticalMaintCheck" style="cursor: pointer; flex: 1;">
+                                <div style="font-weight: 800; color: #9a3412; font-size: 0.9rem;">
+                                    ⚠️ اعتبار هذه الصيانة حرجة إلزامية (إيقاف فوري تلقائي ومنع تأجير)
+                                </div>
+                                <div style="font-size: 0.8rem; color: #78350f; margin-top: 2px;">
+                                    إذا تم وضع صح هنا، ستقفل السيارة فور وصول العداد أو حلول الموعد، وتتحول لحالة "بالصيانة"، ولا يمكن لأي موظف فتح عقد تأجير لها حتى يتم إجراء الصيانة وتأكيدها.
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" style="font-weight: 700;">سبب أو بيان الصيانة الحرجة (اختياري):</label>
+                            <input type="text" class="form-control" @bind="_editCriticalReason" placeholder="مثال: غيار زيت المحرك وفلتر الوكالة الإلزامي لتفادي احتراق المحرك" />
+                        </div>
+
+                        <div style="display: flex; justify-content: flex-end;">
+                            <button class="btn-primary-action" @onclick="SaveCriticalSchedule">
+                                💾 حفظ وتحديث جدول الصيانة والحد الحرج
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                <!-- TAB 2: CONFIRM MAINTENANCE COMPLETED -->
+                @if (_activeProfileTab == "confirm")
+                {
+                    <div style="background: #fdfaf4; border: 1.5px solid var(--border-color); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+                        <div style="font-weight: 800; color: var(--text-main); font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+                            <span>🛠️ تسجيل وتأكيد إنجاز الصيانة (إعادة المركبة للتأجير):</span>
+                        </div>
+                        <div style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.5;">
+                            عند الضغط على تأكيد، سيتم توثيق هذه الصيانة في الأرشيف الفني للمركبة، وتحديث قراءة العداد، وتسجيل التكلفة كمصروف صيانة في صندوق الوردية الحالية، وإلغاء حظر الصيانة الحرجة وإعادة المركبة إلى حالة <strong style="color: var(--accent-green);">"متاحة للتأجير"</strong> فوراً.
+                        </div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" style="font-weight: 700;">نوع الصيانة المنفذة *:</label>
+                                <select class="form-control" @bind="_confirmType">
+                                    <option value="@MaintenanceType.RoutineOilFilter">تغيير زيت وفلاتر دوري</option>
+                                    <option value="@MaintenanceType.Brakes">فحص واستبدال فحمات المكابح</option>
+                                    <option value="@MaintenanceType.Tires">تبديل أو صيانة الإطارات</option>
+                                    <option value="@MaintenanceType.Battery">فحص واستبدال البطارية</option>
+                                    <option value="@MaintenanceType.MechanicalRepair">إصلاح ميكانيكي عام</option>
+                                    <option value="@MaintenanceType.BodyWork">صيانة وتصليح هيكل / دهان</option>
+                                    <option value="@MaintenanceType.LicenseRenewal">تجديد رخصة واستمارة</option>
+                                    <option value="@MaintenanceType.InsuranceRenewal">تجديد بوليصة التأمين</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" style="font-weight: 700;">قراءة العداد عند الصيانة (كم) *:</label>
+                                <input type="number" class="form-control" @bind="_confirmOdometer" />
+                            </div>
+                        </div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" style="font-weight: 700;">التكلفة الإجمالية (₪):</label>
+                                <input type="number" class="form-control" @bind="_confirmCost" />
+                                <span style="font-size: 0.74rem; color: var(--text-muted); margin-top: 2px;">(تُسجل تلقائياً كمصروف في الصندوق)</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" style="font-weight: 700;">مركز الخدمة / الورشة المنفذة *:</label>
+                                <input type="text" class="form-control" @bind="_confirmProvider" placeholder="بترومين، ورشة المجد، الوكالة..." />
+                            </div>
+                        </div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" style="font-weight: 700;">رقم الفاتورة الضريبية:</label>
+                                <input type="text" class="form-control" @bind="_confirmInvoice" placeholder="رقم الفاتورة أو السند" />
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" style="font-weight: 700;">ملاحظات الصيانة والقطع المستبدلة:</label>
+                                <input type="text" class="form-control" @bind="_confirmNotes" placeholder="تم استبدال زيت تويوتا الأصلي مع فلتر الوكالة..." />
+                            </div>
+                        </div>
+
+                        <!-- الإعداد للمرحلة القادمة -->
+                        <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+                            <div style="font-weight: 800; font-size: 0.85rem; color: var(--text-main);">
+                                📍 تحديد موعد استحقاق الصيانة القادمة للمركبة:
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" style="font-weight: 700;">تاريخ الموعد القادم المستهدف:</label>
+                                <input type="date" class="form-control" @bind="_confirmNextDate" style="font-weight: 700;" />
+                                <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+                                    <span style="font-size: 0.76rem; color: var(--text-muted); font-weight: 700;">تحديد سريع:</span>
+                                    <button type="button" class="filter-pill" style="font-size: 0.74rem; padding: 2px 8px;" @onclick="() => SetConfirmScheduleDurationMonths(1)">+ شهر</button>
+                                    <button type="button" class="filter-pill" style="font-size: 0.74rem; padding: 2px 8px;" @onclick="() => SetConfirmScheduleDurationMonths(3)">+ 3 أشهر</button>
+                                    <button type="button" class="filter-pill" style="font-size: 0.74rem; padding: 2px 8px;" @onclick="() => SetConfirmScheduleDurationMonths(6)">+ 6 أشهر</button>
+                                    <button type="button" class="filter-pill" style="font-size: 0.74rem; padding: 2px 8px;" @onclick="() => SetConfirmScheduleDurationMonths(12)">+ سنة</button>
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                                <input type="checkbox" id="confirmNextCritical" @bind="_confirmNextIsCritical" style="width: 17px; height: 17px; accent-color: #dc2626;" />
+                                <label for="confirmNextCritical" style="font-size: 0.84rem; font-weight: 700; color: #9a3412; cursor: pointer;">
+                                    تفعيل الحد الحرج الإلزامي (إيقاف تلقائي) عند حلول هذا الموعد
+                                </label>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+                            <button class="btn-primary-action" style="background: #059669; border-color: #059669; padding: 10px 22px; font-size: 0.92rem;" @onclick="ConfirmMaintenanceCompleted">
+                                ✅ تأكيد إنجاز الصيانة بنجاح وفك الإيقاف وإتاحة المركبة للتأجير
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                <!-- TAB 3: MAINTENANCE HISTORY DOSSIER -->
+                @if (_activeProfileTab == "history")
+                {
+                    <div style="display: flex; flex-direction: column; gap: 14px;">
+                        <!-- Summary Ribbon -->
+                        <div style="background: #fdfaf4; border: 1.5px solid var(--border-color); border-radius: 10px; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                            <div style="display: flex; gap: 20px;">
+                                <div>
+                                    <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">عدد الصيانات السابقة:</div>
+                                    <div style="font-size: 1.15rem; font-weight: 800; color: var(--text-main);">@_vehicleHistory.Count عملية</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">إجمالي مصاريف الصيانة على المركبة:</div>
+                                    <div style="font-size: 1.15rem; font-weight: 800; color: var(--primary-blue);">@_vehicleHistory.Sum(m => m.Cost).ToString("N0") ₪</div>
+                                </div>
+                            </div>
+                            <button class="filter-pill" style="font-weight: 700;" @onclick='() => _activeProfileTab = "confirm"'>
+                                + تسجيل صيانة جديدة
+                            </button>
+                        </div>
+
+                        <!-- Table -->
+                        @if (_vehicleHistory.Any())
+                        {
+                            <div class="data-table-container" style="border-radius: 8px;">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>التاريخ</th>
+                                            <th>نوع الصيانة</th>
+                                            <th>قراءة العداد</th>
+                                            <th>التكلفة</th>
+                                            <th>الورشة / المركز</th>
+                                            <th>رقم الفاتورة / الملاحظات</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var rec in _vehicleHistory)
+                                        {
+                                            <tr>
+                                                <td style="font-weight: 700;">@rec.ServiceDate.ToString("yyyy/MM/dd")</td>
+                                                <td>
+                                                    <span style="background: var(--primary-bg); color: var(--primary-blue); font-weight: 700; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem;">
+                                                        @GetMaintenanceTypeName(rec.Type)
+                                                    </span>
+                                                </td>
+                                                <td style="font-weight: bold;">@rec.OdometerAtService.ToString("N0") كم</td>
+                                                <td style="font-weight: 800; color: var(--text-main);">@rec.Cost.ToString("N0") ₪</td>
+                                                <td>@rec.ServiceProvider</td>
+                                                <td>
+                                                    <div style="font-size: 0.8rem;">
+                                                        @if (!string.IsNullOrEmpty(rec.InvoiceNumber))
+                                                        {
+                                                            <span style="font-family: monospace; font-weight: bold; background: #eee; padding: 1px 4px; border-radius: 3px;">فاتورة: @rec.InvoiceNumber</span>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(rec.Notes))
+                                                        {
+                                                            <span style="color: var(--text-muted); margin-right: 4px;">@rec.Notes</span>
+                                                        }
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="empty-state-card" style="padding: 30px;">
+                                <div class="empty-state-icon">📋</div>
+                                <div class="empty-state-title">لا توجد سجلات صيانة سابقة لهذه المركبة بعد</div>
+                                <div class="empty-state-sub">عند إنجاز أي صيانة دورية أو إصلاح للمركبة، سيتم أرشفتها هنا تلقائياً لتوثيق تاريخها الفني.</div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-primary-action" @onclick="CloseMaintenanceProfileModal">
+                    إغلاق الملف
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_vehicleForCondition != null)
+{
+    <VehicleConditionModal Vehicle="@_vehicleForCondition" 
+                           OnSaved="OnVehicleConditionSaved" 
+                           OnClose="() => _vehicleForCondition = null" />
+}
+
+@if (_selectedFinancialVehicle != null)
+{
+    <VehicleFinancialProfileModal Vehicle="@_selectedFinancialVehicle" 
+                                 OnClose="() => _selectedFinancialVehicle = null" />
+}
+
+<!-- Delete Vehicle Confirmation Modal -->
+@if (_showDeleteModal && _vehicleToDelete != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 500px; width: 95%;">
+            <div class="modal-header" style="background: #fee2e2; border-bottom: 1.5px solid #fca5a5;">
+                <div class="modal-title" style="display: flex; align-items: center; gap: 8px; color: #991b1b;">
+                    <div style="width: 32px; height: 32px; border-radius: 50%; background: #dc2626; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
+                        🗑️
+                    </div>
+                    <span style="font-size: 1.1rem; font-weight: 800;">تأكيد حذف المركبة من الأسطول</span>
+                </div>
+                <button type="button" class="btn-close-modal" @onclick="() => _showDeleteModal = false">×</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <div style="text-align: center; margin-bottom: 16px;">
+                    <div style="font-size: 1rem; font-weight: 700; color: #475569;">
+                        هل أنت متأكد من رغبتك في حذف المركبة:
+                    </div>
+                    <div style="font-size: 1.25rem; font-weight: 900; color: #0f172a; margin: 6px 0;">
+                        @_vehicleToDelete.Brand @_vehicleToDelete.Model (@_vehicleToDelete.ModelYear)
+                    </div>
+                    <div style="display: inline-block; font-family: monospace; font-weight: bold; background: #ede6d8; padding: 4px 12px; border-radius: 6px; font-size: 1rem; border: 1px solid var(--border-color); color: var(--primary-blue);">
+                        رقم اللوحة: @_vehicleToDelete.PlateNumber
+                    </div>
+                </div>
+
+                @if (_vehicleToDelete.Status == VehicleStatus.Rented)
+                {
+                    <div style="background: #fee2e2; border: 1.5px solid #ef4444; border-radius: 8px; padding: 12px; color: #991b1b; font-size: 0.88rem; font-weight: 700; line-height: 1.5;">
+                        ⛔ تنبيه أمان: هذه المركبة <strong>مؤجرة حالياً بعقد نشط</strong>! لا يمكن حذفها من النظام حتى يتم استلامها وإنهاء العقد رسمياً.
+                    </div>
+                }
+                else
+                {
+                    <div style="background: #fffbeb; border: 1.5px solid #fcd34d; border-radius: 8px; padding: 12px; color: #92400e; font-size: 0.85rem; line-height: 1.5;">
+                        ⚠️ ملاحظة: سيتم حذف المركبة وإزالتها من الأسطول المتاح للتأجير. إذا كان للمركبة عقود تاريخية سابقة فسيتم الاحتفاظ بها في الأرشيف المالي لضمان سلامة الحسابات.
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(_deleteError))
+                {
+                    <div style="margin-top: 12px; background: #fee2e2; border: 1px solid #ef4444; color: #b91c1c; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: bold;">
+                        @_deleteError
+                    </div>
+                }
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="filter-pill" @onclick="() => _showDeleteModal = false">إلغاء</button>
+                @if (_vehicleToDelete.Status != VehicleStatus.Rented)
+                {
+                    <button type="button" class="btn-primary-action" style="background: #dc2626; border-color: #b91c1c; color: white;" @onclick="ConfirmDeleteVehicle" disabled="@_isDeleting">
+                        @if (_isDeleting)
+                        {
+                            <span>جاري الحذف...</span>
+                        }
+                        else
+                        {
+                            <span>نعم، حذف المركبة</span>
+                        }
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showNewContractModal && _contractVehicleId.HasValue)
+{
+    <NewContractModal 
+        InitialVehicleId="_contractVehicleId" 
+        OnContractCreated="OnContractCreated" 
+        OnClose="() => { _showNewContractModal = false; _contractVehicleId = null; }" />
+}
+
+@code {
+    private bool _showNewContractModal = false;
+    private Guid? _contractVehicleId;
+
+    private void OpenRentalForVehicle(Vehicle v)
+    {
+        _contractVehicleId = v.Id;
+        _showNewContractModal = true;
+    }
+
+    private async Task OnContractCreated()
+    {
+        _showNewContractModal = false;
+        _contractVehicleId = null;
+        await LoadVehicles();
+    }
+
+    private bool _showDeleteModal = false;
+    private Vehicle? _vehicleToDelete;
+    private string? _deleteError;
+    private bool _isDeleting = false;
+
+    private void PromptDeleteVehicle(Vehicle v)
+    {
+        _vehicleToDelete = v;
+        _deleteError = null;
+        _isDeleting = false;
+        _showDeleteModal = true;
+    }
+
+    private void PromptDeleteVehicleFromModal()
+    {
+        if (_newVehicle != null)
+        {
+            var match = _vehicles?.FirstOrDefault(v => v.Id == _newVehicle.Id) ?? _newVehicle;
+            _showAddModal = false;
+            PromptDeleteVehicle(match);
+        }
+    }
+
+    private async Task ConfirmDeleteVehicle()
+    {
+        if (_vehicleToDelete == null) return;
+
+        _deleteError = null;
+        _isDeleting = true;
+
+        try
+        {
+            var staffName = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username) 
+                ? AuthState.CurrentUser.Username 
+                : AuthState.CurrentUser.FullName;
+
+            await RentalService.DeleteVehicleAsync(_vehicleToDelete.Id, staffName);
+            _showDeleteModal = false;
+            _vehicleToDelete = null;
+            await LoadVehicles();
+        }
+        catch (Exception ex)
+        {
+            _deleteError = ex.InnerException?.Message ?? ex.Message;
+        }
+        finally
+        {
+            _isDeleting = false;
+        }
+    }
+
+    private Vehicle? _selectedFinancialVehicle;
+    private void OpenVehicleFinancialModal(Vehicle vehicle)
+    {
+        _selectedFinancialVehicle = vehicle;
+    }
+
+    private Vehicle? _vehicleForCondition;
+
+    private void OpenVehicleConditionModal(Vehicle vehicle)
+    {
+        _vehicleForCondition = vehicle;
+    }
+
+    private async Task OnVehicleConditionSaved()
+    {
+        _vehicleForCondition = null;
+        await LoadVehicles();
+    }
+    private List<Vehicle>? _vehicles;
+    private string _searchQuery = "";
+    private bool _showAddModal = false;
+    private Vehicle _newVehicle = new();
+
+    private IEnumerable<Vehicle> FilteredVehicles => _vehicles?
+        .Where(v => string.IsNullOrWhiteSpace(_searchQuery) ||
+                    v.Brand.ContainsArabic(_searchQuery) ||
+                    v.Model.ContainsArabic(_searchQuery) ||
+                    v.PlateNumber.ContainsArabic(_searchQuery) ||
+                    (v.Color != null && v.Color.ContainsArabic(_searchQuery)) ||
+                    v.VinNumber.ContainsArabic(_searchQuery)) ?? Enumerable.Empty<Vehicle>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        RentalService.OnContractsDataChanged += HandleContractsDataChanged;
+        await LoadVehicles();
+    }
+
+    private async void HandleContractsDataChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadVehicles();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        RentalService.OnContractsDataChanged -= HandleContractsDataChanged;
+    }
+
+    private async Task LoadVehicles()
+    {
+        _vehicles = await RentalService.GetVehiclesAsync();
+    }
+
+    private bool _isEditingExistingVehicle = false;
+    private string? _modalError;
+
+    private void OpenAddVehicleModal()
+    {
+        _isEditingExistingVehicle = false;
+        _modalError = null;
+        _newVehicle = new Vehicle
+        {
+            ModelYear = DateTime.Now.Year,
+            LicenseExpiryDate = DateTime.Today.AddYears(1),
+            InsuranceExpiryDate = DateTime.Today.AddYears(1),
+            CurrentOdometer = 1000,
+            NextOilChangeOdometer = 10000,
+            NextMaintenanceDate = DateTime.Today.AddMonths(6),
+            DailyStandardRate = 180,
+            ImageUrl = "/images/cars/accent_white.jpg"
+        };
+        _showAddModal = true;
+    }
+
+    private bool IsImageSelected(string path)
+    {
+        if (string.IsNullOrEmpty(_newVehicle.ImageUrl)) return false;
+        var normA = _newVehicle.ImageUrl.TrimStart('/');
+        var normB = path.TrimStart('/');
+        return normA.Equals(normB, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OpenEditVehicleModal(Vehicle v)
+    {
+        _isEditingExistingVehicle = true;
+        _modalError = null;
+        _newVehicle = new Vehicle
+        {
+            Id = v.Id,
+            Brand = v.Brand,
+            Model = v.Model,
+            ModelYear = v.ModelYear,
+            Color = v.Color,
+            PlateNumber = v.PlateNumber,
+            VinNumber = v.VinNumber,
+            CurrentOdometer = v.CurrentOdometer,
+            DailyStandardRate = v.DailyStandardRate,
+            LicenseExpiryDate = v.LicenseExpiryDate,
+            InsuranceExpiryDate = v.InsuranceExpiryDate,
+            InsuranceCompany = v.InsuranceCompany,
+            NextOilChangeOdometer = v.NextOilChangeOdometer,
+            NextMaintenanceDate = v.NextMaintenanceDate,
+            Status = v.Status,
+            ImageUrl = v.ImageUrl,
+            IsActive = v.IsActive,
+            CreatedAt = v.CreatedAt
+        };
+        _showAddModal = true;
+    }
+
+    private async Task HandleVehiclePhotoUpload(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file != null)
+            {
+                // ضغط ذكي بحجم 500x320 لإنتاج صورة خفيفة جداً (~25KB) وعالية الوضوح لضمان عدم استهلاك مساحة السحابة
+                var resized = await file.RequestImageFileAsync("image/jpeg", 500, 320);
+                using var stream = resized.OpenReadStream(maxAllowedSize: 6 * 1024 * 1024);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
+                _newVehicle.ImageUrl = $"data:image/jpeg;base64,{base64}";
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error uploading car photo: {ex.Message}");
+        }
+    }
+
+    private async Task SaveNewVehicle()
+    {
+        _modalError = null;
+        if (string.IsNullOrWhiteSpace(_newVehicle.Brand) || string.IsNullOrWhiteSpace(_newVehicle.Model) || string.IsNullOrWhiteSpace(_newVehicle.PlateNumber))
+        {
+            _modalError = "يرجى تعبئة الحقول الإلزامية: الشركة المصنعة، الطراز، ورقم اللوحة!";
+            return;
+        }
+
+        try
+        {
+            var staffName = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username) 
+                ? AuthState.CurrentUser.Username 
+                : AuthState.CurrentUser.FullName;
+
+            await RentalService.SaveVehicleAsync(_newVehicle, staffName);
+            _showAddModal = false;
+            await LoadVehicles();
+        }
+        catch (Exception ex)
+        {
+            _modalError = ex.InnerException?.Message ?? ex.Message;
+        }
+    }
+
+    private void OpenMaintenanceModal(Vehicle v)
+    {
+        _ = OpenMaintenanceProfileModal(v);
+    }
+
+    // Comprehensive Maintenance Profile State
+    private Vehicle? _selectedVehicleForProfile;
+    private List<MaintenanceRecord> _vehicleHistory = new();
+    private string _activeProfileTab = "overview";
+    private string? _profileMessage;
+    private string? _profileError;
+    private bool _showHaltReasonInput = false;
+    private string _haltReason = "";
+
+    // Critical schedule edit fields
+    private int? _editNextDueOdometer;
+    private DateTime? _editNextDueDate;
+    private bool _editIsCritical;
+    private string? _editCriticalReason;
+
+    // Confirm maintenance fields
+    private MaintenanceType _confirmType = MaintenanceType.RoutineOilFilter;
+    private int _confirmOdometer;
+    private decimal _confirmCost = 250;
+    private string _confirmProvider = "مركز الخدمة السريع";
+    private string _confirmInvoice = "";
+    private string _confirmNotes = "";
+    private int? _confirmNextOdometer;
+    private DateTime? _confirmNextDate;
+    private bool _confirmNextIsCritical = true;
+
+    private void SetScheduleDurationMonths(int months)
+    {
+        _editNextDueDate = DateTime.Today.AddMonths(months);
+    }
+
+    private void SetConfirmScheduleDurationMonths(int months)
+    {
+        _confirmNextDate = DateTime.Today.AddMonths(months);
+    }
+
+    private async Task OpenMaintenanceProfileModal(Vehicle v)
+    {
+        _profileMessage = null;
+        _profileError = null;
+        _activeProfileTab = "overview";
+        _showHaltReasonInput = false;
+        _haltReason = "";
+
+        _selectedVehicleForProfile = await RentalService.GetVehicleMaintenanceProfileAsync(v.Id) ?? v;
+        _vehicleHistory = await RentalService.GetMaintenanceRecordsAsync(v.Id);
+
+        _editNextDueOdometer = _selectedVehicleForProfile.NextOilChangeOdometer;
+        _editNextDueDate = _selectedVehicleForProfile.NextMaintenanceDate;
+        _editIsCritical = _selectedVehicleForProfile.IsMaintenanceCritical;
+        _editCriticalReason = _selectedVehicleForProfile.CriticalMaintenanceReason ?? "صيانة دورية حرجة";
+
+        _confirmType = MaintenanceType.RoutineOilFilter;
+        _confirmOdometer = _selectedVehicleForProfile.CurrentOdometer;
+        _confirmCost = 250;
+        _confirmProvider = "مركز الخدمة السريع";
+        _confirmInvoice = "";
+        _confirmNotes = "";
+        _confirmNextOdometer = _selectedVehicleForProfile.CurrentOdometer + 10000;
+        _confirmNextDate = DateTime.Today.AddMonths(6);
+        _confirmNextIsCritical = true;
+    }
+
+    private void CloseMaintenanceProfileModal()
+    {
+        _selectedVehicleForProfile = null;
+    }
+
+    private async Task RefreshProfile()
+    {
+        if (_selectedVehicleForProfile != null)
+        {
+            _selectedVehicleForProfile = await RentalService.GetVehicleMaintenanceProfileAsync(_selectedVehicleForProfile.Id);
+            if (_selectedVehicleForProfile != null)
+            {
+                _vehicleHistory = await RentalService.GetMaintenanceRecordsAsync(_selectedVehicleForProfile.Id);
+                _editNextDueOdometer = _selectedVehicleForProfile.NextOilChangeOdometer;
+                _editNextDueDate = _selectedVehicleForProfile.NextMaintenanceDate;
+                _editIsCritical = _selectedVehicleForProfile.IsMaintenanceCritical;
+                _editCriticalReason = _selectedVehicleForProfile.CriticalMaintenanceReason;
+            }
+        }
+    }
+
+    private async Task ToggleHalt(bool halt)
+    {
+        _profileError = null;
+        _profileMessage = null;
+        try
+        {
+            var staff = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username) 
+                ? AuthState.CurrentUser.Username 
+                : AuthState.CurrentUser.FullName;
+
+            await RentalService.ToggleVehicleMaintenanceHaltAsync(
+                _selectedVehicleForProfile!.Id,
+                halt,
+                halt ? (string.IsNullOrWhiteSpace(_haltReason) ? "إيقاف إداري للصيانة ومنع التأجير" : _haltReason) : null,
+                staff);
+
+            _profileMessage = halt ? "تم إيقاف المركبة بنجاح ومنعها من التأجير في كافة أنحاء النظام." : "تم فك إيقاف المركبة وإعادتها متاحة للتأجير.";
+            _showHaltReasonInput = false;
+            _haltReason = "";
+
+            await RefreshProfile();
+            await LoadVehicles();
+        }
+        catch (Exception ex)
+        {
+            _profileError = ex.InnerException?.Message ?? ex.Message;
+        }
+    }
+
+    private async Task SaveCriticalSchedule()
+    {
+        _profileError = null;
+        _profileMessage = null;
+        try
+        {
+            var staff = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username) 
+                ? AuthState.CurrentUser.Username 
+                : AuthState.CurrentUser.FullName;
+
+            await RentalService.SetCriticalMaintenanceScheduleAsync(
+                _selectedVehicleForProfile!.Id,
+                _editNextDueOdometer,
+                _editNextDueDate,
+                _editIsCritical,
+                _editCriticalReason,
+                staff);
+
+            _profileMessage = "تم حفظ وتحديث جدول وحد الصيانة بنجاح.";
+            await RefreshProfile();
+            await LoadVehicles();
+        }
+        catch (Exception ex)
+        {
+            _profileError = ex.InnerException?.Message ?? ex.Message;
+        }
+    }
+
+    private async Task ConfirmMaintenanceCompleted()
+    {
+        _profileError = null;
+        _profileMessage = null;
+        if (_confirmOdometer < _selectedVehicleForProfile!.CurrentOdometer)
+        {
+            _profileError = $"قراءة العداد عند الصيانة ({_confirmOdometer} كم) لا يمكن أن تكون أقل من قراءة العداد الحالية ({_selectedVehicleForProfile.CurrentOdometer} كم)!";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_confirmProvider))
+        {
+            _profileError = "يرجى إدخال اسم مركز الخدمة أو الورشة المنفذة للصيانة!";
+            return;
+        }
+
+        try
+        {
+            var staff = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username) 
+                ? AuthState.CurrentUser.Username 
+                : AuthState.CurrentUser.FullName;
+
+            await RentalService.ConfirmMaintenanceCompletedAsync(
+                _selectedVehicleForProfile.Id,
+                _confirmType,
+                _confirmOdometer,
+                _confirmCost,
+                _confirmProvider,
+                _confirmInvoice,
+                _confirmNotes,
+                _confirmNextOdometer,
+                _confirmNextDate,
+                _confirmNextIsCritical,
+                staff);
+
+            _profileMessage = "تم تأكيد إنجاز الصيانة بنجاح، وتحديث قراءة العداد، وفك حظر المركبة وإعادتها متاحة للتأجير الفوري!";
+            await RefreshProfile();
+            await LoadVehicles();
+        }
+        catch (Exception ex)
+        {
+            _profileError = ex.InnerException?.Message ?? ex.Message;
+        }
+    }
+
+    private string GetMaintenanceTypeName(MaintenanceType type) => type switch
+    {
+        MaintenanceType.RoutineOilFilter => "تغيير زيت وفلاتر دوري",
+        MaintenanceType.Brakes => "فحص واستبدال فحمات المكابح",
+        MaintenanceType.Tires => "تبديل أو صيانة الإطارات",
+        MaintenanceType.Battery => "فحص واستبدال البطارية",
+        MaintenanceType.MechanicalRepair => "إصلاح ميكانيكي عام",
+        MaintenanceType.BodyWork => "صيانة هيكل ودهان",
+        MaintenanceType.LicenseRenewal => "تجديد رخصة واستمارة",
+        MaintenanceType.InsuranceRenewal => "تجديد بوليصة التأمين",
+        _ => "صيانة عامة"
+    };
+}

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ar-EG" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TAJ SYSTEM - نظام إدارة تأجير السيارات</title>
+    <base href="/" />
+    <link rel="icon" type="image/png" href="images/logo.png" />
+    <link rel="shortcut icon" href="favicon.ico" />
+    <style>
+        /* Immediate baseline styling: zero white flash on startup */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #f6f3eb !important;
+            font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+            overflow: hidden;
+        }
+        #app {
+            height: 100%;
+            width: 100%;
+            display: flex;
+            background-color: #f6f3eb;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <!-- Local app styles load immediately from disk without network dependencies -->
+    <link rel="stylesheet" href="css/app.css" />
+
+    <!-- Google Fonts loaded asynchronously so slow/offline network never blocks startup -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Tajawal:wght@400;500;700;800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Tajawal:wght@400;500;700;800&display=swap" media="print" onload="this.media='all'">
+    <noscript>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Tajawal:wght@400;500;700;800&display=swap">
+    </noscript>
+</head>
+<body>
+    <div id="app">
+        <!-- Loading Screen -->
+        <div style="height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#f6f3eb; color:#526077; font-family:'Cairo', sans-serif;">
+            <div style="width:50px; height:50px; border:4px solid #ded4bf; border-top-color:#0284c7; border-radius:50%; animation:spin 1s linear infinite; margin-bottom:18px;"></div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <span style="font-size:1.6rem;">👑</span>
+                <h2 style="font-size:1.45rem; font-weight:900; letter-spacing:1px; color:#1e293b; margin:0;">TAJ SYSTEM</h2>
+            </div>
+            <p style="font-size:0.88rem; color:#c59b27; font-weight:700; margin:0;">نظام التاج لإدارة وتأجير السيارات...</p>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui" style="display:none; position:fixed; bottom:0; width:100%; background:#ef4444; color:#fff; padding:12px; text-align:center; z-index:99999;">
+        حدث خطأ غير متوقع. <a href="" class="reload" style="color:#fff; font-weight:bold; margin-right:8px;">إعادة التحميل</a>
+    </div>
+
+    <script src="js/vehicleCondition.js"></script>
+    <script src="js/carAudio.js"></script>
+    <script src="js/printHelper.js"></script>
+    <script>
+        // Smooth horizontal scrolling and responsive management for top header tabs
+        window.scrollTabs = function (delta) {
+            var tabs = document.getElementById('mainHeaderTabs') || document.querySelector('.header-center-tabs');
+            if (tabs) {
+                tabs.scrollBy({ left: delta, behavior: 'smooth' });
+                window.checkTabsOverflow();
+            }
+        };
+
+        window.scrollActiveTabIntoView = function () {
+            var tabs = document.getElementById('mainHeaderTabs') || document.querySelector('.header-center-tabs');
+            if (tabs) {
+                var active = tabs.querySelector('.header-tab.active');
+                if (active) {
+                    active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                }
+                window.checkTabsOverflow();
+            }
+        };
+
+        window.checkTabsOverflow = function () {
+            var tabs = document.getElementById('mainHeaderTabs') || document.querySelector('.header-center-tabs');
+            var wrapper = document.querySelector('.header-center-wrapper');
+            if (!tabs || !wrapper) return;
+            var isOverflowing = tabs.scrollWidth > (tabs.clientWidth + 4);
+            if (isOverflowing) {
+                wrapper.classList.add('has-overflow');
+            } else {
+                wrapper.classList.remove('has-overflow');
+            }
+        };
+
+        window.initHeaderTabs = function () {
+            window.checkTabsOverflow();
+            window.addEventListener('resize', window.checkTabsOverflow);
+            setTimeout(window.scrollActiveTabIntoView, 100);
+        };
+
+        // Smooth horizontal scrolling for top header tabs on mouse wheel (RTL-aware)
+        document.addEventListener('wheel', function (e) {
+            var tabs = e.target.closest('.header-center-tabs');
+            if (tabs && e.deltaY !== 0) {
+                var step = e.deltaY > 0 ? -120 : 120;
+                tabs.scrollBy({ left: step, behavior: 'auto' });
+                e.preventDefault();
+                window.checkTabsOverflow();
+            }
+        }, { passive: false });
+    </script>
+    <script src="_framework/blazor.webview.js"></script>
+</body>
+</html>

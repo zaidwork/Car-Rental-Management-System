@@ -1,0 +1,786 @@
+@page "/customers"
+@using CarRental.Core.Helpers
+@using CarRental.App.Helpers
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+@implements IDisposable
+
+<div style="display: flex; flex-direction: column; gap: 20px;">
+    <!-- Top Bar -->
+    <div class="action-bar-strip">
+        <div class="action-bar-left">
+            <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--text-main);">إدارة ملفات العملاء (Customer Management)</h2>
+            <span style="font-size: 0.84rem; color: var(--text-muted); font-weight: 500;">شرط إلزامي: تسجيل العميل والتحقق الأمني قبل فتح أي عقد</span>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <div class="search-input-box">
+                <input type="text" placeholder="بحث بالاسم أو رقم الهوية أو الهاتف..." @bind="_searchQuery" @bind:event="oninput" />
+            </div>
+            <button class="filter-pill" style="border: 1.5px solid #10b981; color: #047857; font-weight: 800; cursor: pointer;" @onclick="ExportCustomersToExcel" title="تصدير كشف العملاء والديون إلى Excel">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span>تصدير Excel 📊</span>
+            </button>
+
+            <button class="btn-primary-action" @onclick="OpenAddCustomerModal">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>إضافة عميل جديد</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Customers Table -->
+    <div class="data-table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>الاسم الرباعي</th>
+                    <th>رقم الهوية / الجواز</th>
+                    <th>رقم الرخصة</th>
+                    <th>صلاحية الرخصة</th>
+                    <th>السن</th>
+                    <th>الجوال الأساسي</th>
+                    <th>إجمالي الديون</th>
+                    <th>الحالة الأمنية</th>
+                    <th>الإجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_customers != null && FilteredCustomers.Any())
+                {
+                    @foreach (var c in FilteredCustomers)
+                    {
+                        var isBlacklisted = c.BlacklistRecord?.IsBlocked == true;
+                        <tr>
+                            <td style="font-weight: 800; color: var(--text-main);">@c.FullName</td>
+                            <td style="font-family: monospace; font-weight: bold;">@c.NationalIdOrPassport</td>
+                            <td style="font-family: monospace;">@c.LicenseNumber</td>
+                            <td>
+                                @if (c.IsLicenseExpired)
+                                {
+                                    <span style="color: var(--accent-red); font-weight: bold;">منتهية (@c.LicenseExpiryDate.ToString("yyyy/MM/dd"))</span>
+                                }
+                                else if (c.DaysUntilLicenseExpiry <= 30)
+                                {
+                                    <span style="color: var(--accent-orange); font-weight: bold;">تنتهي قريباً (@c.DaysUntilLicenseExpiry يوم)</span>
+                                }
+                                else
+                                {
+                                    <span style="color: var(--accent-green);">سارية (@c.LicenseExpiryDate.ToString("yyyy/MM/dd"))</span>
+                                }
+                            </td>
+                            <td>@c.Age سنة</td>
+                            <td style="direction: ltr; text-align: right;">@c.PrimaryPhone</td>
+                            <td style="font-weight: bold; color: @(c.TotalDebts > 0 ? "var(--accent-red)" : "var(--accent-green)");">
+                                @c.TotalDebts.ToString("N0") ₪
+                            </td>
+                            <td>
+                                @if (isBlacklisted)
+                                {
+                                    <span style="background: var(--accent-red-bg); color: var(--accent-red); border: 1px solid var(--accent-red-border); padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 0.78rem;">
+                                        ⛔ محظور (قائمة سوداء)
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span style="background: var(--accent-green-bg); color: var(--accent-green); border: 1px solid var(--accent-green-border); padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 0.78rem;">
+                                        ✓ مصرح للتأجير
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                <div style="display: flex; gap: 6px;">
+                                    <!-- WhatsApp Direct -->
+                                    <button class="icon-btn-subtle" style="color: #16a34a;" title="محادثة واتساب مباشرة" @onclick="() => OpenWhatsApp(c.PrimaryPhone, c.FullName)">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                                        </svg>
+                                    </button>
+
+                                    <!-- Direct Debt Pay -->
+                                    @if (c.TotalDebts > 0)
+                                    {
+                                        <button class="icon-btn-subtle" style="color: #dc2626;" title="قبض دفعة من ديون العميل" @onclick="() => _debtCustomer = c">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <circle cx="12" cy="12" r="10"></circle>
+                                                <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path>
+                                                <path d="M12 18V6"></path>
+                                            </svg>
+                                        </button>
+                                    }
+
+                                    <!-- Customer Statement -->
+                                    <button class="icon-btn-subtle" style="color: #0284c7;" title="كشف حساب مالي تفصيلي" @onclick="() => _statementCustomer = c">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                                            <line x1="6" y1="20" x2="6" y2="14"></line>
+                                        </svg>
+                                    </button>
+
+                                    <button class="icon-btn-subtle" title="تعديل بيانات العميل" @onclick="() => OpenEditCustomerModal(c)">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                        </svg>
+                                    </button>
+
+                                    <button class="icon-btn-subtle" title="سجل العميل وأرشيف الإيجارات والوثائق" @onclick="() => ViewCustomerHistory(c)">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <polyline points="12 6 12 12 16 14"></polyline>
+                                        </svg>
+                                    </button>
+
+                                    @if (!isBlacklisted && AuthState.IsAdmin)
+                                    {
+                                        <button class="icon-btn-subtle" style="color: var(--accent-red);" title="إدراج بالقائمة السوداء (حظر)" @onclick="() => OpenBlacklistModal(c)">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <circle cx="12" cy="12" r="10"></circle>
+                                                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                                            </svg>
+                                        </button>
+                                    }
+
+                                    @if (AuthState.IsAdmin)
+                                    {
+                                        <button class="icon-btn-subtle" style="color: #ef4444;" title="حذف ملف العميل نهائياً" @onclick="() => ConfirmDeleteCustomer(c)">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <polyline points="3 6 5 6 21 6"></polyline>
+                                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                                            </svg>
+                                        </button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="9" style="text-align: center; padding: 45px 20px;">
+                            <div class="empty-state-card" style="border: none; background: transparent; padding: 10px; margin: 0 auto;">
+                                <div class="empty-state-icon">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                                        <circle cx="9" cy="7" r="4"/>
+                                        <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                    </svg>
+                                </div>
+                                <div class="empty-state-title">لا يوجد عملاء مسجلين في النظام حتى الآن</div>
+                                <div class="empty-state-sub">النظام نظيف تماماً. يمكنك البدء بتسجيل بيانات المستأجر والتحقق من هويته ورخصته.</div>
+                                <button class="btn-primary-action" @onclick="OpenAddCustomerModal" style="margin-top: 10px;">
+                                    + إضافة أول عميل
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Add / Edit Customer -->
+@if (_showAddModal)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 680px; width: 95%;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary-blue)" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>@(_isEditingCustomer ? $"تعديل بيانات العميل: {_newCustomer.FullName}" : "تسجيل عميل جديد بالبيانات الإلزامية")</span>
+                </div>
+                <button class="btn-close-modal" @onclick="() => _showAddModal = false">×</button>
+            </div>
+            <div class="modal-body" style="overflow-x: hidden;">
+                <div class="form-group">
+                    <label class="form-label">الاسم الرباعي الكامل (إلزامي) *:</label>
+                    <input type="text" class="form-control" @bind="_newCustomer.FullName" placeholder="الاسم الأول، اسم الأب، الجد، العائلة" />
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">رقم الهوية الوطنية أو جواز السفر *:</label>
+                        <input type="text" class="form-control" @bind="_newCustomer.NationalIdOrPassport" placeholder="10xxxxxxxx أو رقم الجواز" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">رقم رخصة القيادة *:</label>
+                        <input type="text" class="form-control" @bind="_newCustomer.LicenseNumber" placeholder="DL-xxxxxx" />
+                    </div>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">تاريخ انتهاء رخصة القيادة *:</label>
+                        <input type="date" class="form-control" @bind="_newCustomer.LicenseExpiryDate" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">تاريخ الميلاد (السن القانوني >= 21) *:</label>
+                        <input type="date" class="form-control" @bind="_newCustomer.DateOfBirth" />
+                    </div>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">رقم الهاتف الأساسي *:</label>
+                        <input type="text" class="form-control" @bind="_newCustomer.PrimaryPhone" placeholder="05xxxxxxxx" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">رقم هاتف بديل للطوارئ:</label>
+                        <input type="text" class="form-control" @bind="_newCustomer.EmergencyPhone" placeholder="05xxxxxxxx" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">عنوان السكن / الإقامة:</label>
+                    <input type="text" class="form-control" @bind="_newCustomer.Address" placeholder="المدينة، الحي، الشارع" />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">ملاحظات إضافية عن العميل:</label>
+                    <input type="text" class="form-control" @bind="_newCustomer.Notes" placeholder="أي ملاحظات أو تنبيهات خاصة بالعميل..." />
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">صورة الهوية الوطنية / جواز السفر:</label>
+                        <InputFile OnChange="HandleIdPhotoUpload" accept="image/*" class="form-control" />
+                        @if (!string.IsNullOrEmpty(_newCustomer.IdPhotoBase64))
+                        {
+                            <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+                                <img src="@_newCustomer.IdPhotoBase64" style="height: 50px; border-radius: 4px; border: 1px solid var(--border-color);" />
+                                <button type="button" class="icon-btn-subtle" style="color: var(--accent-red);" @onclick="() => _newCustomer.IdPhotoBase64 = null">حذف</button>
+                            </div>
+                        }
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">صورة رخصة القيادة:</label>
+                        <InputFile OnChange="HandleLicensePhotoUpload" accept="image/*" class="form-control" />
+                        @if (!string.IsNullOrEmpty(_newCustomer.LicensePhotoBase64))
+                        {
+                            <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+                                <img src="@_newCustomer.LicensePhotoBase64" style="height: 50px; border-radius: 4px; border: 1px solid var(--border-color);" />
+                                <button type="button" class="icon-btn-subtle" style="color: var(--accent-red);" @onclick="() => _newCustomer.LicensePhotoBase64 = null">حذف</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_modalError))
+                {
+                    <div style="background: #fee2e2; border: 1.5px solid #ef4444; color: #991b1b; padding: 10px 14px; border-radius: 6px; font-size: 0.88rem; font-weight: 700;">
+                        @_modalError
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="filter-pill" @onclick="() => _showAddModal = false">إلغاء</button>
+                <button class="btn-primary-action" @onclick="SaveNewCustomer">
+                    @(_isEditingCustomer ? "حفظ التعديلات على بيانات العميل" : "حفظ العميل في النظام")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal: Customer History Archive -->
+@if (_selectedHistoryCustomer != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 780px;">
+            <div class="modal-header">
+                <div class="modal-title">سجل وأرشيف العميل (@_selectedHistoryCustomer.FullName)</div>
+                <button class="btn-close-modal" @onclick="() => _selectedHistoryCustomer = null">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; justify-content: space-between; background: #f9f6f0; padding: 14px; border-radius: 6px; border: 1.5px solid var(--border-color);">
+                    <div><strong>الهوية:</strong> @_selectedHistoryCustomer.NationalIdOrPassport</div>
+                    <div><strong>الجوال:</strong> @_selectedHistoryCustomer.PrimaryPhone</div>
+                    <div><strong>إجمالي العقود:</strong> @(_selectedHistoryCustomer.Contracts?.Count ?? 0)</div>
+                    <div style="color: @(_selectedHistoryCustomer.TotalDebts > 0 ? "var(--accent-red)" : "var(--accent-green)"); font-weight: bold;">
+                        <strong>الديون:</strong> @_selectedHistoryCustomer.TotalDebts.ToString("N0") ₪
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_selectedHistoryCustomer.IdPhotoBase64) || !string.IsNullOrEmpty(_selectedHistoryCustomer.LicensePhotoBase64))
+                {
+                    <h4 style="font-size: 0.95rem; margin-top: 15px; color: var(--primary-blue); font-weight: 800;">الوثائق المؤرشفة (الهوية والرخصة):</h4>
+                    <div style="display: flex; gap: 16px; margin-top: 8px;">
+                        @if (!string.IsNullOrEmpty(_selectedHistoryCustomer.IdPhotoBase64))
+                        {
+                            <div style="flex: 1; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; text-align: center; background: #fff;">
+                                <div style="font-weight: 600; font-size: 0.82rem; margin-bottom: 4px;">الهوية الوطنية / الجواز</div>
+                                <img src="@_selectedHistoryCustomer.IdPhotoBase64" style="max-width: 100%; max-height: 180px; object-fit: contain; border-radius: 4px;" />
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(_selectedHistoryCustomer.LicensePhotoBase64))
+                        {
+                            <div style="flex: 1; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; text-align: center; background: #fff;">
+                                <div style="font-weight: 600; font-size: 0.82rem; margin-bottom: 4px;">رخصة القيادة</div>
+                                <img src="@_selectedHistoryCustomer.LicensePhotoBase64" style="max-width: 100%; max-height: 180px; object-fit: contain; border-radius: 4px;" />
+                            </div>
+                        }
+                    </div>
+                }
+
+                <h4 style="font-size: 0.95rem; margin-top: 15px; color: var(--primary-blue); font-weight: 800;">أرشيف السيارات المستأجرة وتواريخ الاستلام:</h4>
+                <div class="data-table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>رقم العقد</th>
+                                <th>السيارة</th>
+                                <th>تاريخ الاستلام</th>
+                                <th>تاريخ الإعادة</th>
+                                <th>المبلغ المتفق</th>
+                                <th>المسدد</th>
+                                <th>الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_selectedHistoryCustomer.Contracts != null && _selectedHistoryCustomer.Contracts.Any())
+                            {
+                                @foreach (var co in _selectedHistoryCustomer.Contracts)
+                                {
+                                    <tr>
+                                        <td style="font-family: monospace; font-weight: bold;">@co.ContractNumber</td>
+                                        <td>@co.Vehicle?.Brand @co.Vehicle?.Model</td>
+                                        <td>@co.StartDateTime.ToString("yyyy/MM/dd")</td>
+                                        <td>@co.ExpectedReturnDateTime.ToString("yyyy/MM/dd")</td>
+                                        <td style="font-weight: bold;">@co.TotalAgreedAmount.ToString("N0") ₪</td>
+                                        <td style="color: var(--accent-green); font-weight: bold;">@co.PaidAmount.ToString("N0") ₪</td>
+                                        <td>
+                                             <span style="font-size: 0.78rem; padding: 2px 6px; border-radius: 4px; background: @(co.Status == ContractStatus.Active ? "var(--primary-bg)" : "#ede6d8"); color: @(co.Status == ContractStatus.Active ? "var(--primary-blue)" : "var(--text-muted)");">
+                                                @(co.Status == ContractStatus.Active ? "نشط حالياً" : "مغلق ومستلم")
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="7" style="text-align: center; color: #64748b;">لا توجد عقود سابقة لهذا العميل</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="filter-pill" @onclick="() => _selectedHistoryCustomer = null">إغلاق</button>
+                <button class="btn-primary-action" @onclick="() => { var c = _selectedHistoryCustomer; _selectedHistoryCustomer = null; OpenEditCustomerModal(c); }">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    <span>تعديل بيانات هذا العميل</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal: Blacklist Addition -->
+@if (_customerToBlacklist != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 520px;">
+            <div class="modal-header">
+                <div class="modal-title" style="color: #ef4444;">إدراج عميل في القائمة السوداء (Blacklist)</div>
+                <button class="btn-close-modal" @onclick="() => _customerToBlacklist = null">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.9rem; color: var(--text-main);">
+                    أنت بصدد إدراج العميل: <strong>@_customerToBlacklist.FullName</strong> (هوية: @_customerToBlacklist.NationalIdOrPassport) في القائمة السوداء.
+                </p>
+                <div class="form-group" style="margin-top: 10px;">
+                    <label class="form-label">سبب الإدراج الإلزامي (يوثق في سجل التدقيق الأمني):</label>
+                    <textarea class="form-control" rows="3" @bind="_blacklistReason" placeholder="اذكر سبب الحظر بالتفصيل..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="filter-pill" @onclick="() => _customerToBlacklist = null">إلغاء</button>
+                <button class="btn-primary-action" style="background: #ef4444;" @onclick="ConfirmBlacklist">
+                    تأكيد إدراج العميل في القائمة السوداء
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Pay Debt Modal -->
+@if (_debtCustomer != null)
+{
+    <CarRental.App.Components.Modals.PayDebtModal 
+        Customer="_debtCustomer" 
+        OnDebtPaid="HandleDebtPaid" 
+        OnClose="() => _debtCustomer = null" />
+}
+
+<!-- Customer Statement Modal -->
+@if (_statementCustomer != null)
+{
+    <CarRental.App.Components.Modals.CustomerStatementModal 
+        Customer="_statementCustomer" 
+        OnClose="() => _statementCustomer = null" />
+}
+
+<!-- Delete Customer Modal (نافذة تأكيد حذف العميل) -->
+@if (_customerToDelete != null)
+{
+    <div class="modal-overlay" style="z-index: 9999;">
+        <div class="modal-card" style="max-width: 500px; text-align: center;">
+            <div class="modal-header" style="border-bottom: 2px solid #fee2e2; justify-content: center; position: relative;">
+                <div class="modal-title" style="color: #ef4444; font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                    <span>تأكيد حذف ملف العميل نهائياً</span>
+                </div>
+                <button class="btn-close-modal" style="position: absolute; left: 16px;" @onclick="CancelDeleteCustomer">×</button>
+            </div>
+            <div class="modal-body" style="padding: 24px 20px;">
+                <p style="font-size: 0.95rem; color: var(--text-main); margin-bottom: 12px; line-height: 1.6;">
+                    هل أنت متأكد من رغبتك في حذف العميل:
+                </p>
+                <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+                    <div style="font-size: 1.15rem; font-weight: 800; color: var(--primary-blue);">@_customerToDelete.FullName</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+                        رقم الهوية: <strong>@_customerToDelete.NationalIdOrPassport</strong> • الهاتف: <strong>@_customerToDelete.PrimaryPhone</strong>
+                    </div>
+                </div>
+
+                @if (_customerToDelete.TotalDebts > 0)
+                {
+                    <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px; color: #991b1b; font-size: 0.85rem; font-weight: 700; margin-bottom: 14px;">
+                        ⚠️ تنبيه مالي: هذا العميل مسجل بذمته دين مستحق بقيمة (@_customerToDelete.TotalDebts ₪). تأكيد الحذف سيقوم بإزالة حسابه من كشوفات الديون.
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(_deleteErrorMessage))
+                {
+                    <div style="background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 14px; font-weight: 600;">
+                        ⚠️ @_deleteErrorMessage
+                    </div>
+                }
+
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0;">
+                    سيتم حذف ملف العميل من قاعدة البيانات المحلية وسوبابيز وتطبيق الموبايل بشكل متزامن.
+                </p>
+            </div>
+            <div class="modal-footer" style="justify-content: center; gap: 14px; padding-bottom: 20px;">
+                <button class="filter-pill" style="padding: 10px 24px; min-width: 110px;" @onclick="CancelDeleteCustomer" disabled="@_isDeletingCustomer">
+                    إلغاء
+                </button>
+                <button class="btn-primary-action" style="background: #ef4444; border-color: #dc2626; padding: 10px 24px; min-width: 140px; color: #ffffff;" @onclick="ExecuteDeleteCustomer" disabled="@_isDeletingCustomer">
+                    @if (_isDeletingCustomer)
+                    {
+                        <span>جاري الحذف...</span>
+                    }
+                    else
+                    {
+                        <span>🗑️ نعم، حذف نهائياً</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Customer>? _customers;
+    private string _searchQuery = "";
+
+    private bool _showAddModal = false;
+    private Customer _newCustomer = new();
+    private string? _modalError;
+
+    private Customer? _selectedHistoryCustomer;
+    private Customer? _customerToBlacklist;
+    private string _blacklistReason = "";
+
+    private Customer? _customerToDelete;
+    private bool _isDeletingCustomer = false;
+    private string? _deleteErrorMessage;
+
+    private Customer? _debtCustomer;
+    private Customer? _statementCustomer;
+
+    private IEnumerable<Customer> FilteredCustomers => _customers?
+        .Where(c => string.IsNullOrWhiteSpace(_searchQuery) ||
+                    c.FullName.ContainsArabic(_searchQuery) ||
+                    c.NationalIdOrPassport.ContainsArabic(_searchQuery) ||
+                    c.PrimaryPhone.ContainsArabic(_searchQuery) ||
+                    c.LicenseNumber.ContainsArabic(_searchQuery)) ?? Enumerable.Empty<Customer>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        RentalService.OnContractsDataChanged += HandleContractsDataChanged;
+        await LoadCustomers();
+    }
+
+    private async void HandleContractsDataChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadCustomers();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        RentalService.OnContractsDataChanged -= HandleContractsDataChanged;
+    }
+
+    private async Task LoadCustomers()
+    {
+        _customers = await RentalService.GetCustomersAsync();
+    }
+
+    private bool _isEditingCustomer = false;
+
+    private void OpenAddCustomerModal()
+    {
+        _isEditingCustomer = false;
+        _newCustomer = new Customer
+        {
+            DateOfBirth = DateTime.Today.AddYears(-25),
+            LicenseExpiryDate = DateTime.Today.AddYears(2)
+        };
+        _modalError = null;
+        _showAddModal = true;
+    }
+
+    private void OpenEditCustomerModal(Customer c)
+    {
+        _isEditingCustomer = true;
+        _newCustomer = new Customer
+        {
+            Id = c.Id,
+            FullName = c.FullName,
+            NationalIdOrPassport = c.NationalIdOrPassport,
+            LicenseNumber = c.LicenseNumber,
+            LicenseExpiryDate = c.LicenseExpiryDate,
+            DateOfBirth = c.DateOfBirth,
+            PrimaryPhone = c.PrimaryPhone,
+            EmergencyPhone = c.EmergencyPhone,
+            Address = c.Address,
+            Notes = c.Notes,
+            IdPhotoBase64 = c.IdPhotoBase64,
+            LicensePhotoBase64 = c.LicensePhotoBase64,
+            TotalDebts = c.TotalDebts,
+            CreatedByUsername = c.CreatedByUsername,
+            CreatedAt = c.CreatedAt
+        };
+        _modalError = null;
+        _showAddModal = true;
+    }
+
+    private async Task HandleIdPhotoUpload(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file != null)
+            {
+                using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
+                _newCustomer.IdPhotoBase64 = $"data:{file.ContentType};base64,{base64}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _modalError = "خطأ في تحميل صورة الهوية: " + ex.Message;
+        }
+    }
+
+    private async Task HandleLicensePhotoUpload(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file != null)
+            {
+                using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
+                _newCustomer.LicensePhotoBase64 = $"data:{file.ContentType};base64,{base64}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _modalError = "خطأ في تحميل صورة الرخصة: " + ex.Message;
+        }
+    }
+
+    private void OpenWhatsApp(string phone, string name)
+    {
+        try
+        {
+            var clean = new string(phone.Where(char.IsDigit).ToArray());
+            if (clean.StartsWith("05"))
+            {
+                clean = "972" + clean.Substring(1);
+            }
+            var msg = $"مرحباً {name}، نود التواصل معك بخصوص حسابك في مكتب تأجير السيارات.";
+            var url = $"https://wa.me/{clean}?text={Uri.EscapeDataString(msg)}";
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = url, UseShellExecute = true });
+        }
+        catch { }
+    }
+
+    private async Task HandleDebtPaid(FinancialTransaction tx)
+    {
+        _debtCustomer = null;
+        await LoadCustomers();
+    }
+
+    private async Task SaveNewCustomer()
+    {
+        if (string.IsNullOrWhiteSpace(_newCustomer.FullName) || _newCustomer.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length < 3)
+        {
+            _modalError = "يرجى كتابة الاسم الرباعي كاملاً (3 أسماء على الأقل)!";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newCustomer.NationalIdOrPassport))
+        {
+            _modalError = "رقم الهوية الوطنية أو جواز السفر إلزامي!";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newCustomer.PrimaryPhone))
+        {
+            _modalError = "رقم الجوال الأساسي إلزامي!";
+            return;
+        }
+
+        if (_newCustomer.Age < 21)
+        {
+            _modalError = "عمر العميل أقل من السن القانوني المسموح به للتأجير (21 سنة)!";
+            return;
+        }
+
+        try
+        {
+            await RentalService.SaveCustomerAsync(_newCustomer, AuthState.CurrentUser.FullName);
+            _showAddModal = false;
+            await LoadCustomers();
+        }
+        catch (Exception ex)
+        {
+            _modalError = ex.InnerException?.Message ?? ex.Message;
+        }
+    }
+
+    private async Task ViewCustomerHistory(Customer c)
+    {
+        _selectedHistoryCustomer = await RentalService.GetCustomerByIdAsync(c.Id);
+    }
+
+    private void OpenBlacklistModal(Customer c)
+    {
+        _customerToBlacklist = c;
+        _blacklistReason = "";
+    }
+
+    private async Task ConfirmBlacklist()
+    {
+        if (string.IsNullOrWhiteSpace(_blacklistReason)) return;
+        if (_customerToBlacklist != null)
+        {
+            await RentalService.AddToBlacklistAsync(_customerToBlacklist.Id, _blacklistReason, AuthState.CurrentUser.FullName);
+            _customerToBlacklist = null;
+            await LoadCustomers();
+        }
+    }
+
+    private void ExportCustomersToExcel()
+    {
+        if (_customers == null || !_customers.Any()) return;
+
+        var headers = new[]
+        {
+            "الاسم الرباعي", "رقم الهوية / الجواز", "رقم الرخصة", "تاريخ انتهاء الرخصة",
+            "رقم الجوال الأساسي", "رقم الطوارئ", "العنوان", "إجمالي الديون (₪)", "الحالة الأمنية"
+        };
+
+        var rows = FilteredCustomers.Select(c => new object?[]
+        {
+            c.FullName,
+            c.NationalIdOrPassport,
+            c.LicenseNumber,
+            c.LicenseExpiryDate.ToString("yyyy/MM/dd"),
+            c.PrimaryPhone,
+            c.EmergencyPhone ?? "",
+            c.Address,
+            c.TotalDebts,
+            c.BlacklistRecord?.IsBlocked == true ? "محظور (قائمة سوداء)" : "سليم (مسموح بالتأجير)"
+        });
+
+        ExportHelper.ExportToCsv($"Customers_Report_{DateTime.Now:yyyyMMdd_HHmm}.csv", headers, rows);
+    }
+
+    private void ConfirmDeleteCustomer(Customer c)
+    {
+        _customerToDelete = c;
+        _deleteErrorMessage = null;
+        _isDeletingCustomer = false;
+    }
+
+    private void CancelDeleteCustomer()
+    {
+        _customerToDelete = null;
+        _deleteErrorMessage = null;
+        _isDeletingCustomer = false;
+    }
+
+    private async Task ExecuteDeleteCustomer()
+    {
+        if (_customerToDelete == null) return;
+        _isDeletingCustomer = true;
+        _deleteErrorMessage = null;
+
+        try
+        {
+            var adminUser = !string.IsNullOrWhiteSpace(AuthState.CurrentUser.Username) 
+                ? AuthState.CurrentUser.Username 
+                : AuthState.CurrentUser.FullName;
+
+            await RentalService.DeleteCustomerAsync(_customerToDelete.Id, adminUser);
+            _customerToDelete = null;
+            await LoadCustomers();
+        }
+        catch (Exception ex)
+        {
+            _deleteErrorMessage = ex.Message;
+        }
+        finally
+        {
+            _isDeletingCustomer = false;
+        }
+    }
+}

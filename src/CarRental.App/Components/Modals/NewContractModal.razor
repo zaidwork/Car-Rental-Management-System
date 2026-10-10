@@ -1,0 +1,1142 @@
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+
+<div class="modal-overlay">
+    <div class="modal-card" style="max-width: 820px; width: 95%;">
+        <div class="modal-header">
+            <div class="modal-title">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2">
+                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                </svg>
+                <span>فتح عقد تأجير جديد (إصدار العقد والكمبيالة الضامنة)</span>
+            </div>
+            <button class="btn-close-modal" @onclick="OnClose">×</button>
+        </div>
+
+        <div class="modal-body">
+            <!-- الخطوة 1: اختيار العميل والتحقق الأمني الإلزامي -->
+            <!-- الخطوة 1: اختيار العميل والتحقق الأمني الإلزامي -->
+            <div style="background: #fdfaf4; border: 1.5px solid var(--border-color); border-radius: 10px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.03); display: flex; flex-direction: column; gap: 10px;">
+                <label class="form-label" style="display: flex; justify-content: space-between; align-items: center; margin: 0;">
+                    <span style="font-weight: 800; color: var(--text-main); font-size: 0.95rem;">1. تحديد المستأجر (شرط إلزامي: مسجل مسبقاً وغير محظور):</span>
+                    <span style="font-size: 0.78rem; font-weight: 700; color: var(--primary-blue); background: #e0f2fe; padding: 4px 10px; border-radius: 6px; border: 1px solid #bae6fd;">
+                        🛡️ فحص فوري للقائمة السوداء وصلاحية الرخصة
+                    </span>
+                </label>
+
+                <!-- شريط بحث سريع للعملاء -->
+                <div style="position: relative;">
+                    <input type="text" class="form-control" placeholder="🔍 بحث سريع عن العميل (بالاسم أو رقم الهوية أو الجوال)..."
+                           @bind="_customerSearchQuery" @bind:event="oninput" style="padding-left: 30px;" />
+                    @if (!string.IsNullOrEmpty(_customerSearchQuery))
+                    {
+                        <button type="button" @onclick="() => _customerSearchQuery = string.Empty"
+                                style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.9rem; font-weight: bold;">✕</button>
+                    }
+                </div>
+
+                <div>
+                    <select class="form-control" @bind="_selectedCustomerId" @bind:after="OnCustomerSelected">
+                        <option value="">-- اختر المستأجر (@FilteredCustomers.Count() عميل متوفر) --</option>
+                        @foreach (var c in FilteredCustomers)
+                        {
+                            <option value="@c.Id">@c.FullName (هوية: @c.NationalIdOrPassport | جوال: @c.PrimaryPhone)</option>
+                        }
+                    </select>
+                </div>
+
+                @if (_eligibilityCheck != null)
+                {
+                    <div style="padding: 12px 14px; border-radius: 8px; font-size: 0.88rem; font-weight: 700; @(_eligibilityCheck.IsBlacklisted ? "background: #fee2e2; border: 1.5px solid #ef4444; color: #991b1b;" : !_eligibilityCheck.CanRent ? "background: #fef3c7; border: 1.5px solid #f59e0b; color: #92400e;" : "background: #d1fae5; border: 1.5px solid #10b981; color: #065f46;")">
+                        @_eligibilityCheck.Message
+                        @if (_eligibilityCheck.OutstandingDebts > 0)
+                        {
+                            <div style="margin-top: 4px; font-weight: bold; color: var(--accent-orange);">
+                                تنبيه مالي: على العميل ديون سابقة مستحقة بقيمة: @_eligibilityCheck.OutstandingDebts.ToString("N0") ₪.
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- الخطوة 2: اختيار المركبة المتاحة -->
+            <div class="form-group" style="background: #fdfaf4; border: 1.5px solid var(--border-color); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <label class="form-label" style="font-weight: 800; color: var(--text-main); font-size: 0.95rem; margin: 0;">
+                        2. تحديد المركبة للتأجير:
+                    </label>
+                    @if (SelectedVehicle != null)
+                    {
+                        <span style="font-size: 0.82rem; font-weight: 800; color: #065f46; background: #d1fae5; border: 1.5px solid #10b981; padding: 4px 12px; border-radius: 12px; display: inline-flex; align-items: center; gap: 6px;">
+                            <span>🚗 تم تحديد السيارة:</span>
+                            <span style="text-decoration: underline;">@SelectedVehicle.Brand @SelectedVehicle.Model</span>
+                            <span>(@SelectedVehicle.PlateNumber)</span>
+                        </span>
+                    }
+                    else
+                    {
+                        <span style="font-size: 0.78rem; font-weight: 700; color: var(--accent-orange);">
+                            ⚠️ اختر سيارة من الأسطول أدناه
+                        </span>
+                    }
+                </div>
+
+                <!-- شريط بحث سريع للسيارات -->
+                <div style="position: relative;">
+                    <input type="text" class="form-control" placeholder="🔍 بحث سريع في الأسطول (بالماركة، الموديل، أو رقم اللوحة)..."
+                           @bind="_vehicleSearchQuery" @bind:event="oninput" style="padding-left: 30px;" />
+                    @if (!string.IsNullOrEmpty(_vehicleSearchQuery))
+                    {
+                        <button type="button" @onclick="() => _vehicleSearchQuery = string.Empty"
+                                style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.9rem; font-weight: bold;">✕</button>
+                    }
+                </div>
+
+                <select class="form-control" @bind="_selectedVehicleId" @bind:after="OnVehicleSelected" style="font-weight: 600;">
+                    <option value="">-- اختر سيارة من الأسطول (@FilteredVehicles.Count(v => v.Status == VehicleStatus.Available && !v.IsBlockedByCriticalMaintenance) سيارة متاحة للتأجير) --</option>
+                    @foreach (var v in FilteredVehicles)
+                    {
+                        @if (v.Status == VehicleStatus.Available && !v.IsBlockedByCriticalMaintenance)
+                        {
+                            <option value="@v.Id" style="color: #065f46; font-weight: bold; background: #f0fdf4;">
+                                🟢 [متاحة للتأجير] @v.Brand @v.Model (@v.ModelYear) - لوحة: @v.PlateNumber - عداد: @v.CurrentOdometer.ToString("N0") كم - @v.DailyStandardRate ₪/يوم
+                            </option>
+                        }
+                        else if (v.Status == VehicleStatus.Rented)
+                        {
+                            <option value="@v.Id" disabled style="color: #dc2626; font-weight: bold; background: #fee2e2;">
+                                🔴 [مؤجرة حالياً - غير قابلة للتأجير] @v.Brand @v.Model - لوحة: @v.PlateNumber
+                            </option>
+                        }
+                        else
+                        {
+                            <option value="@v.Id" disabled style="color: #b91c1c; font-weight: bold; background: #fee2e2;">
+                                ⛔ [متوقفة بالصيانة - ممنوعة من التأجير] @v.Brand @v.Model - لوحة: @v.PlateNumber (@(v.CriticalMaintenanceReason ?? "صيانة إلزامية"))
+                            </option>
+                        }
+                    }
+                </select>
+
+                @if (SelectedVehicle != null)
+                {
+                    <div style="background: #ffffff; border: 1.5px solid @(SelectedVehicle.Status == VehicleStatus.Available && !SelectedVehicle.IsBlockedByCriticalMaintenance ? "var(--border-color)" : "#ef4444"); border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; @(SelectedVehicle.Status != VehicleStatus.Available || SelectedVehicle.IsBlockedByCriticalMaintenance ? "box-shadow: 0 0 12px rgba(239, 68, 68, 0.25); background: #fffafa;" : "")">
+                        <div style="display: flex; align-items: center; gap: 14px;">
+                            @if (!string.IsNullOrEmpty(SelectedVehicle.ImageUrl))
+                            {
+                                <img src="@SelectedVehicle.ImageUrl" alt="@SelectedVehicle.Model" style="width: 76px; height: 50px; object-fit: contain; background: #fdfaf4; border-radius: 6px; padding: 3px; border: 1px solid var(--border-subtle);" />
+                            }
+                            else
+                            {
+                                <div style="width: 76px; height: 50px; background: #f3efe6; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; border: 1px solid var(--border-subtle);">🚗</div>
+                            }
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span style="font-weight: 800; font-size: 1.05rem; color: var(--text-main);">@SelectedVehicle.Brand @SelectedVehicle.Model (@SelectedVehicle.ModelYear)</span>
+                                    @if (SelectedVehicle.Status == VehicleStatus.Rented)
+                                    {
+                                        <span style="background: #fee2e2; color: #dc2626; border: 1.5px solid #ef4444; padding: 2px 8px; border-radius: 6px; font-weight: 800; font-size: 0.76rem; box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);">
+                                            🔴 مؤجرة حالياً - غير قابلة للتأجير
+                                        </span>
+                                    }
+                                    else if (SelectedVehicle.Status == VehicleStatus.InMaintenance || SelectedVehicle.IsBlockedByCriticalMaintenance)
+                                    {
+                                        <span style="background: #fee2e2; color: #b91c1c; border: 1.5px solid #ef4444; padding: 2px 8px; border-radius: 6px; font-weight: 800; font-size: 0.76rem;">
+                                            ⛔ متوقفة بالصيانة - ممنوعة من التأجير
+                                        </span>
+                                    }
+                                    else if (SelectedVehicle.Status == VehicleStatus.Available)
+                                    {
+                                        <span style="background: #d1fae5; color: #065f46; border: 1.5px solid #10b981; padding: 2px 8px; border-radius: 6px; font-weight: 800; font-size: 0.76rem;">
+                                            🟢 متاحة للتأجير الفوري
+                                        </span>
+                                    }
+                                </div>
+                                <div style="font-size: 0.82rem; color: var(--text-muted); display: flex; gap: 14px; margin-top: 4px; align-items: center; flex-wrap: wrap;">
+                                    <span>عداد: <strong>@SelectedVehicle.CurrentOdometer.ToString("N0") كم</strong></span>
+                                    <span>اللون: <strong>@SelectedVehicle.Color</strong></span>
+                                    <span>السعر: <strong>@SelectedVehicle.DailyStandardRate ₪/يوم</strong></span>
+                                    @if (SelectedVehicle.ActiveDamagesCount > 0)
+                                    {
+                                        <span style="background: #fef3c7; color: #b45309; border: 1px solid #f59e0b; padding: 1px 6px; border-radius: 4px; font-weight: 800; font-size: 0.74rem;">
+                                            ⚠️ @SelectedVehicle.ActiveDamagesCount أضرار مسجلة
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        <div style="text-align: left; display: flex; flex-direction: column; gap: 6px; align-items: flex-end;">
+                            <span style="font-family: monospace; font-weight: 800; background: #ede6d8; padding: 5px 12px; border-radius: 6px; color: var(--primary-blue); border: 1.5px solid var(--border-color); font-size: 1rem;">
+                                @SelectedVehicle.PlateNumber
+                            </span>
+                            <button type="button" class="btn-primary-action" style="padding: 4px 10px; font-size: 0.74rem; background: #d97706; border-color: #d97706;" @onclick="() => _showConditionModalForVehicle = SelectedVehicle">
+                                <span>🔍 كشف حالة الهيكل</span>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- الخطوة 3: التواريخ ونوع العقد (محدد بالأيام أو تأجير مفتوح) -->
+            <div style="background: #ffffff; border: 1.5px solid var(--border-color); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                <!-- اختيار نوع العقد -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div style="font-weight: 800; font-size: 0.95rem; color: var(--wood-walnut);">
+                        📅 3. فترة التأجير ونوع العقد:
+                    </div>
+                    <div style="display: flex; gap: 8px; background: #f4eee1; padding: 4px; border-radius: 24px; border: 1px solid var(--border-color);">
+                        <button type="button" class="contract-mode-btn @(!_isOpenEnded ? "active" : "")" @onclick="() => SetContractType(false)" disabled="@(!HasSelectedAvailableVehicle)">
+                            ⏱️ عقد محدد بالأيام
+                        </button>
+                        <button type="button" class="contract-mode-btn @(_isOpenEnded ? "active-open" : "")" @onclick="() => SetContractType(true)" disabled="@(!HasSelectedAvailableVehicle)">
+                            ♾️ تأجير مفتوح (يومي مستمر)
+                        </button>
+                    </div>
+                </div>
+
+                @if (!_isOpenEnded)
+                {
+                    <!-- وضع العقد المحدد بالأيام -->
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label class="form-label">تاريخ ووقت الاستلام:</label>
+                            <input type="datetime-local" class="form-control" @bind="_startDateTime" @bind:after="OnStartDateTimeChanged" disabled="@(!HasSelectedAvailableVehicle)" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>مدة الإيجار (عدد الأيام):</span>
+                                <span style="font-size: 0.78rem; color: #0284c7; cursor: pointer; font-weight: bold;" @onclick="() => _showManualTime = !_showManualTime">
+                                    @(_showManualTime ? "إخفاء التعديل بالساعة" : "⚙️ تعديل موعد الإرجاع بالساعة يدوياً")
+                                </span>
+                            </label>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="number" min="1" max="365" class="form-control" @bind="_rentalDays" @bind:after="OnRentalDaysChanged" disabled="@(!HasSelectedAvailableVehicle)" style="font-weight: 900; font-size: 1.15rem; color: var(--primary-blue); text-align: center; width: 110px;" />
+                                <span style="font-weight: 800; font-size: 0.95rem; color: var(--text-muted);">يوم</span>
+                                <div style="display: flex; gap: 4px; flex-wrap: wrap; flex: 1;">
+                                    <button type="button" class="btn-day-chip @(_rentalDays == 1 ? "active" : "")" @onclick="() => SetRentalDays(1)" disabled="@(!HasSelectedAvailableVehicle)">1 يوم</button>
+                                    <button type="button" class="btn-day-chip @(_rentalDays == 2 ? "active" : "")" @onclick="() => SetRentalDays(2)" disabled="@(!HasSelectedAvailableVehicle)">2 يوم</button>
+                                    <button type="button" class="btn-day-chip @(_rentalDays == 3 ? "active" : "")" @onclick="() => SetRentalDays(3)" disabled="@(!HasSelectedAvailableVehicle)">3 أيام</button>
+                                    <button type="button" class="btn-day-chip @(_rentalDays == 5 ? "active" : "")" @onclick="() => SetRentalDays(5)" disabled="@(!HasSelectedAvailableVehicle)">5 أيام</button>
+                                    <button type="button" class="btn-day-chip @(_rentalDays == 7 ? "active" : "")" @onclick="() => SetRentalDays(7)" disabled="@(!HasSelectedAvailableVehicle)">أسبوع (7)</button>
+                                    <button type="button" class="btn-day-chip @(_rentalDays == 10 ? "active" : "")" @onclick="() => SetRentalDays(10)" disabled="@(!HasSelectedAvailableVehicle)">10 أيام</button>
+                                    <button type="button" class="btn-day-chip @(_rentalDays == 14 ? "active" : "")" @onclick="() => SetRentalDays(14)" disabled="@(!HasSelectedAvailableVehicle)">أسبوعين (14)</button>
+                                    <button type="button" class="btn-day-chip @(_rentalDays == 30 ? "active" : "")" @onclick="() => SetRentalDays(30)" disabled="@(!HasSelectedAvailableVehicle)">شهر (30)</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Calculated Return Date Badge & Manual Editor -->
+                    <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 1.2rem;">⏱️</span>
+                            <div>
+                                <div style="font-size: 0.88rem; font-weight: 800; color: #166534;">
+                                    موعد الإرجاع المحسوب: @_endDateTime.ToString("dddd yyyy/MM/dd الساعة hh:mm tt")
+                                </div>
+                                <div style="font-size: 0.76rem; color: #15803d;">
+                                    فترة العقد الإجمالية: @_rentalDays يوم كامل (@(_rentalDays * 24) ساعة)
+                                </div>
+                            </div>
+                        </div>
+                        <div style="font-weight: 900; font-size: 1rem; color: #0f172a; background: #fff; padding: 4px 12px; border-radius: 6px; border: 1px solid #bbf7d0;">
+                            @_totalAgreedAmount.ToString("N0") ₪ (@_rentalDays يوم × @_dailyRate ₪)
+                        </div>
+                    </div>
+
+                    @if (_showManualTime)
+                    {
+                        <div style="background: #fdfaf4; border: 1px dashed var(--border-color); border-radius: 8px; padding: 10px 12px; display: flex; align-items: center; gap: 12px;">
+                            <label class="form-label" style="margin: 0; white-space: nowrap; font-size: 0.82rem;">تعديل موعد الإرجاع بالساعة يدوياً:</label>
+                            <input type="datetime-local" class="form-control" style="max-width: 250px;" @bind="_endDateTime" @bind:after="OnManualEndDateTimeChanged" disabled="@(!CanProceed)" />
+                            <span style="font-size: 0.74rem; color: var(--text-muted);">سيتم إعادة احتساب عدد الأيام والمبلغ الإجمالي تلقائياً</span>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <!-- وضع التأجير المفتوح (Open-ended Rental) -->
+                    <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1.5px solid #f59e0b; border-radius: 10px; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 2px 10px rgba(245, 158, 11, 0.12);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 1.5rem;">♾️</span>
+                                <div>
+                                    <div style="font-size: 1rem; font-weight: 900; color: #92400e;">
+                                        عقد تأجير مفتوح (حساب يومي مستمر)
+                                    </div>
+                                    <div style="font-size: 0.80rem; color: #78350f; margin-top: 2px;">
+                                        بدون تحديد تاريخ إرجاع مسبق • يتم احتساب الأجرة تراكمياً يوماً بيوم بمعدل (@_dailyRate ₪/يوم)
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="text-align: left;">
+                                <div style="font-size: 0.76rem; color: #92400e;">السعر اليومي:</div>
+                                <div style="font-size: 1.25rem; font-weight: 900; color: #b45309;">@_dailyRate ₪ / يوم</div>
+                            </div>
+                        </div>
+
+                        <div class="form-grid-2" style="border-top: 1px dashed #fcd34d; padding-top: 10px; margin-top: 2px;">
+                            <div class="form-group" style="margin: 0;">
+                                <label class="form-label" style="color: #92400e; font-size: 0.84rem;">تاريخ ووقت بدء الاستلام:</label>
+                                <input type="datetime-local" class="form-control" @bind="_startDateTime" disabled="@(!HasSelectedAvailableVehicle)" />
+                            </div>
+                            <div style="display: flex; align-items: center; font-size: 0.82rem; color: #78350f; line-height: 1.5; padding: 6px 10px; background: rgba(255,255,255,0.7); border-radius: 6px;">
+                                💡 ملاحظة: عند استلام السيارة مستقبلاً، سيقوم النظام تلقائياً بحساب كامل الأيام المنقضية، وتوثيق المبلغ المستلم وكيفية الدفع، وترحيل أي ذمم متبقية لحساب العميل.
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- الخطوة 4: التسعير المفتوح والكمبيالة الضامنة والدفعات -->
+            <div style="background: #f9f6f0; border: 1.5px solid var(--border-color); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px;">
+                <div style="font-weight: 800; font-size: 0.95rem; color: var(--primary-blue);">
+                    4. آلية التسعير، الدفعات، والكمبيالة الضامنة:
+                </div>
+                
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">السعر اليومي المتفق عليه (₪):</label>
+                        <input type="number" class="form-control" @bind="_dailyRate" @bind:after="RecalculateTotals" disabled="@(!HasSelectedAvailableVehicle)" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">
+                            @(_isOpenEnded ? "طبيعة حساب العقد:" : "السعر الأساسي للعقد (المفترض ₪):")
+                        </label>
+                        @if (_isOpenEnded)
+                        {
+                            <div style="background: #fff; border: 1.5px solid #f59e0b; padding: 8px 12px; border-radius: 6px; font-weight: 900; color: #b45309; font-size: 0.92rem;">
+                                ♾️ حساب تراكمي مفتوح (@_dailyRate ₪ عن كل يوم)
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="background: #ffffff; border: 1.5px solid var(--border-color); padding: 8px 12px; border-radius: 6px; font-weight: 900; color: #1e3a8a; font-size: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                                <span>@_originalAgreedAmount.ToString("N0") ₪</span>
+                                <span style="font-size: 0.76rem; color: #64748b; font-weight: normal;">(@_rentalDays يوم × @_dailyRate ₪)</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @if (!_isOpenEnded)
+                {
+                    <!-- وحدة التحكم بالخصم المئوي والنقدي -->
+                    <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                            <div style="display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 0.88rem; color: #0f172a;">
+                                <span>🏷️ نوع الخصم الممنوح عند التسليم:</span>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                <button type="button" 
+                                        class="filter-pill @(_discountType == "None" ? "active" : "")" 
+                                        style="font-size: 0.78rem; font-weight: bold; cursor: pointer; padding: 3px 10px; border-radius: 6px;"
+                                        @onclick='() => SetDiscountType("None")'>
+                                    بدون خصم (كامل)
+                                </button>
+                                <button type="button" 
+                                        class="filter-pill @(_discountType == "Percentage" ? "active" : "")" 
+                                        style="font-size: 0.78rem; font-weight: bold; cursor: pointer; padding: 3px 10px; border-radius: 6px; border-color: @(_discountType == "Percentage" ? "#2563eb" : "#cbd5e1");"
+                                        @onclick='() => SetDiscountType("Percentage")'>
+                                    % خصم مئوية
+                                </button>
+                                <button type="button" 
+                                        class="filter-pill @(_discountType == "FixedAmount" ? "active" : "")" 
+                                        style="font-size: 0.78rem; font-weight: bold; cursor: pointer; padding: 3px 10px; border-radius: 6px; border-color: @(_discountType == "FixedAmount" ? "#16a34a" : "#cbd5e1");"
+                                        @onclick='() => SetDiscountType("FixedAmount")'>
+                                    ₪ خصم قيمة نقدية
+                                </button>
+                            </div>
+                        </div>
+
+                        @if (_discountType != "None")
+                        {
+                            <div style="background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 6px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <label style="font-weight: 800; font-size: 0.84rem; color: #334155;">
+                                        @(_discountType == "Percentage" ? "نسبة الخصم (%):" : "مبلغ الخصم (₪):")
+                                    </label>
+                                    <div style="position: relative; width: 110px;">
+                                        <input type="number" 
+                                               class="form-control" 
+                                               style="font-weight: 900; font-size: 1.05rem; text-align: center; color: #dc2626; padding-left: 24px;" 
+                                               @bind="_discountValue" 
+                                               @bind:after="ApplyDiscount" 
+                                               min="0" 
+                                               max="@(_discountType == "Percentage" ? 100 : _originalAgreedAmount)" />
+                                        <span style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-weight: 900; color: #64748b; font-size: 0.9rem;">
+                                            @(_discountType == "Percentage" ? "%" : "₪")
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                                    <span style="font-size: 0.76rem; color: #64748b; font-weight: 600;">اختصار:</span>
+                                    @if (_discountType == "Percentage")
+                                    {
+                                        @foreach (var p in new[] { 5, 10, 15, 20, 25 })
+                                        {
+                                            <button type="button" 
+                                                    class="filter-pill" 
+                                                    style="font-size: 0.74rem; padding: 2px 7px; background: #fff; cursor: pointer;"
+                                                    @onclick="() => SetDiscountPreset(p)">
+                                                @p%
+                                            </button>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @foreach (var val in new[] { 20, 50, 100, 150, 200 })
+                                        {
+                                            <button type="button" 
+                                                    class="filter-pill" 
+                                                    style="font-size: 0.74rem; padding: 2px 7px; background: #fff; cursor: pointer;"
+                                                    @onclick="() => SetDiscountPreset(val)">
+                                                @val ₪
+                                            </button>
+                                        }
+                                    }
+                                </div>
+
+                                <div style="width: 100%; border-top: 1px dashed #cbd5e1; padding-top: 8px; margin-top: 2px; display: flex; justify-content: space-between; align-items: center; font-size: 0.86rem; flex-wrap: wrap; gap: 6px;">
+                                    <span style="color: #64748b;">
+                                        السعر المفترض: <strong style="color: #0f172a; text-decoration: line-through;">@_originalAgreedAmount.ToString("N0") ₪</strong>
+                                        &nbsp;|&nbsp;
+                                        مبلغ الخصم: <strong style="color: #dc2626;">-@_discountAmount.ToString("N0") ₪ @(_discountType == "Percentage" ? $"({_discountValue}%)" : "")</strong>
+                                    </span>
+                                    <span style="background: #f0fdf4; border: 1.5px solid #86efac; color: #166534; padding: 3px 12px; border-radius: 6px; font-weight: 900; font-size: 0.95rem;">
+                                        الإجمالي بعد الخصم: @_totalAgreedAmount.ToString("N0") ₪ ✓
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 800;">طريقة الدفع:</label>
+                        <select class="form-control" @bind="_paymentMode" @bind:after="OnPaymentModeChanged" disabled="@(!HasSelectedAvailableVehicle)" style="font-weight: 800; border-color: @(_paymentMode == PaymentMode.DeferredOnReturn ? "#d97706" : "var(--border-color)");">
+                            <option value="@PaymentMode.ImmediateCash">دفع فوري نقداً عند الاستلام</option>
+                            <option value="@PaymentMode.DeferredOnReturn">دفع آجل عند التسليم (ذمم - يسجل كدين)</option>
+                            <option value="@PaymentMode.BankTransfer">تحويل بنكي فوري</option>
+                            <option value="@PaymentMode.CreditCard">بطاقة مدى / ائتمان</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 800; color: @(_paymentMode == PaymentMode.DeferredOnReturn ? "#b45309" : "inherit");">
+                            @if (_paymentMode == PaymentMode.DeferredOnReturn)
+                            {
+                                <span>المبلغ المدفوع الآن مقدماً / عربون (0 ₪ = آجل بالكامل):</span>
+                            }
+                            else if (_isOpenEnded)
+                            {
+                                <span>دفعة مقدمة / عربون عند الاستلام (اختياري ₪):</span>
+                            }
+                            else
+                            {
+                                <span>المبلغ المدفوع الآن مقدماً (₪):</span>
+                            }
+                        </label>
+                        <input type="number" class="form-control" @bind="_paidAmount" @bind:after="RecalculateRemaining" disabled="@(!HasSelectedAvailableVehicle)" style="font-weight: 800;" />
+                    </div>
+                </div>
+
+                <div class="form-grid-2" style="padding-top: 10px; border-top: 1.5px solid var(--border-color); align-items: center;">
+                    <div class="form-group">
+                        @if (_isOpenEnded)
+                        {
+                            <div style="background: #e0f2fe; border: 1.5px solid #38bdf8; color: #0369a1; padding: 9px 12px; border-radius: 6px; font-weight: 800; font-size: 0.88rem; text-align: center;">
+                                ♾️ عقد مفتوح: الرصيد يتم احتسابه يومياً ويسوى عند استلام السيارة
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="background: @(_remainingAmount > 0 ? "#fee2e2" : "#e0f2fe"); border: 1.5px solid @(_remainingAmount > 0 ? "#ef4444" : "#38bdf8"); color: @(_remainingAmount > 0 ? "#991b1b" : "#0369a1"); padding: 9px 12px; border-radius: 6px; font-weight: 800; font-size: 0.92rem; text-align: center;">
+                                @if (_remainingAmount > 0)
+                                {
+                                    <span>المبلغ المتبقي (ذمم تسجل كدين على العميل): @_remainingAmount.ToString("N0") ₪ ⚠️</span>
+                                }
+                                else
+                                {
+                                    <span>المبلغ المتبقي: 0 ₪ (خالص ومسدد بالكامل) ✓</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="color: var(--accent-gold-hover); font-weight: bold;">
+                            مبلغ كمبيالة الضمان المتفق عليه (₪):
+                        </label>
+                        <input type="number" class="form-control" @bind="_promissoryAmount" disabled="@(!HasSelectedAvailableVehicle)" style="border-color: var(--accent-gold-border); font-weight: bold;" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. السائق الإضافي المعتمد (اختياري) -->
+            <div style="background: #fdfcf9; border: 1.5px solid var(--border-color); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                    <div style="font-weight: 800; font-size: 0.95rem; color: #7e431e;">
+                        🚗 4. السائق الإضافي المعتمد (اختياري):
+                    </div>
+                    <span style="font-size: 0.78rem; color: var(--text-muted);">في حال رغبة المستأجر بتفويض شخص آخر مصرح له بالقيادة</span>
+                </div>
+                
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">الاسم الكامل للسائق الإضافي:</label>
+                        <input type="text" class="form-control" @bind="_additionalDriverName" placeholder="الاسم الرباعي أو الثلاثي" disabled="@(!HasSelectedAvailableVehicle)" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">رقم الهوية / الجواز:</label>
+                        <input type="text" class="form-control" @bind="_additionalDriverId" placeholder="رقم الهوية الرسمية" disabled="@(!HasSelectedAvailableVehicle)" />
+                    </div>
+                </div>
+
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label">رقم رخصة القيادة:</label>
+                        <input type="text" class="form-control" @bind="_additionalDriverLicense" placeholder="رقم رخصة السائق الإضافي" disabled="@(!HasSelectedAvailableVehicle)" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">رقم هاتف السائق الإضافي:</label>
+                        <input type="text" class="form-control" @bind="_additionalDriverPhone" placeholder="05xxxxxxxx" disabled="@(!HasSelectedAvailableVehicle)" />
+                    </div>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div style="color: #ef4444; font-size: 0.86rem; font-weight: bold;">
+                    @_errorMessage
+                </div>
+            }
+
+            @if (SelectedVehicle != null && (_eligibilityCheck == null || !_eligibilityCheck.CanRent))
+            {
+                <div style="font-size: 0.85rem; color: #92400e; font-weight: 800; background: #fef3c7; border: 1.5px solid #fcd34d; padding: 10px 14px; border-radius: 8px; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.2rem;">💡</span>
+                    <span>تم تثبيت سيارة الحجز: (@SelectedVehicle.Brand @SelectedVehicle.Model - لوحة: @SelectedVehicle.PlateNumber) بنجاح. يرجى اختيار وتأكيد المستأجر بالخطوة (1) في الأعلى لاعتماد العقد.</span>
+                </div>
+            }
+        </div>
+
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <button class="filter-pill" @onclick="OnClose">إلغاء</button>
+            <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn-preview-contract" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important; color: #ffffff !important; border: 2px solid #38bdf8 !important; border-radius: 10px; padding: 10px 22px; font-weight: 900; font-size: 0.95rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35); text-decoration: none;" @onclick="OpenContractPreview" disabled="@(!CanProceed || _isSaving)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    <span style="color: #ffffff !important; font-weight: 900; font-size: 0.95rem; letter-spacing: 0.3px;">معاينة العقد ومراجعته قبل التأكيد 📑</span>
+                </button>
+                <button type="button" class="btn-primary-action" @onclick="SubmitContractDirectly" disabled="@(!CanProceed || _isSaving)">
+                    @if (_isSaving)
+                    {
+                        <span>جاري الحفظ والإنشاء...</span>
+                    }
+                    else
+                    {
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2">
+                            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        </svg>
+                        <span style="color: #ffffff !important; font-weight: 900;">إتمام الحجز والاعتماد الفوري ⚡</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (_createdContractToInspect != null)
+{
+    <VehicleInspectionModal Contract="@_createdContractToInspect" 
+                           InitialType="InspectionType.HandoverOut" 
+                           OnSaved="OnHandoverInspectionCompleted" 
+                           OnClose="OnHandoverInspectionSkipped" />
+}
+
+@if (_previewContract != null && _showContractPreview)
+{
+    <PrintDocumentModal Contract="@_previewContract" 
+                        InitialTabContract="true" 
+                        IsPendingConfirmation="true"
+                        OnBackToEdit="HandleBackToEdit"
+                        OnConfirmContract="ConfirmAndSavePreviewContract"
+                        OnClose="HandleBackToEdit" />
+}
+
+@if (_createdContractToPrint != null)
+{
+    <PrintDocumentModal Contract="@_createdContractToPrint" 
+                        InitialTabContract="true" 
+                        CanRollbackNewContract="true"
+                        OnBackToEdit="HandleRollbackNewlyCreatedContract"
+                        OnClose="OnPrintClosed" />
+}
+
+@if (_showConditionModalForVehicle != null)
+{
+    <VehicleConditionModal Vehicle="@_showConditionModalForVehicle"
+                           OnSaved="() => _showConditionModalForVehicle = null"
+                           OnClose="() => _showConditionModalForVehicle = null" />
+}
+
+@code {
+    private Vehicle? _showConditionModalForVehicle;
+    private Contract? _createdContractToInspect;
+    [Parameter] public Guid? InitialVehicleId { get; set; }
+    [Parameter] public EventCallback OnContractCreated { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<Customer> _allCustomers = new();
+    private List<Vehicle> _allVehicles = new();
+
+    private string _customerSearchQuery = "";
+    private string _vehicleSearchQuery = "";
+
+    private IEnumerable<Customer> FilteredCustomers => _allCustomers
+        .Where(c => string.IsNullOrWhiteSpace(_customerSearchQuery) ||
+                    c.FullName.Contains(_customerSearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                    c.NationalIdOrPassport.Contains(_customerSearchQuery) ||
+                    c.PrimaryPhone.Contains(_customerSearchQuery));
+
+    private IEnumerable<Vehicle> FilteredVehicles => _allVehicles
+        .Where(v => string.IsNullOrWhiteSpace(_vehicleSearchQuery) ||
+                    v.Brand.Contains(_vehicleSearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                    v.Model.Contains(_vehicleSearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                    v.PlateNumber.Contains(_vehicleSearchQuery));
+
+    private Guid _selectedCustomerId;
+    private Guid _selectedVehicleId;
+    private CustomerCheckResultDto? _eligibilityCheck;
+
+    private DateTime _startDateTime = DateTime.Now;
+    private int _rentalDays = 1;
+    private DateTime _endDateTime = DateTime.Now.AddDays(1);
+    private bool _isOpenEnded = false;
+    private bool _showManualTime = false;
+
+    private decimal _dailyRate = 200;
+    private decimal _originalAgreedAmount = 200;
+    private string _discountType = "None"; // "None", "Percentage", "FixedAmount"
+    private decimal _discountValue = 0;
+    private decimal _discountAmount = 0;
+    private decimal _totalAgreedAmount = 200;
+    private decimal _paidAmount = 200;
+    private decimal _remainingAmount = 0;
+    private decimal _promissoryAmount = 10000;
+    private PaymentMode _paymentMode = PaymentMode.ImmediateCash;
+
+    private string? _additionalDriverName;
+    private string? _additionalDriverId;
+    private string? _additionalDriverLicense;
+    private string? _additionalDriverPhone;
+
+    private bool _isSaving = false;
+    private string? _errorMessage;
+    private Contract? _createdContractToPrint;
+
+    private bool HasSelectedAvailableVehicle => SelectedVehicle != null && SelectedVehicle.Status == VehicleStatus.Available && !SelectedVehicle.IsBlockedByCriticalMaintenance;
+    private bool CanProceed => _eligibilityCheck?.CanRent == true && HasSelectedAvailableVehicle;
+    private Vehicle? SelectedVehicle => _allVehicles.FirstOrDefault(v => v.Id == _selectedVehicleId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _allCustomers = await RentalService.GetCustomersAsync();
+        _allVehicles = await RentalService.GetVehiclesAsync();
+        SetRentalDays(1);
+
+        if (InitialVehicleId.HasValue && InitialVehicleId.Value != Guid.Empty)
+        {
+            _selectedVehicleId = InitialVehicleId.Value;
+            OnVehicleSelected();
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (InitialVehicleId.HasValue && InitialVehicleId.Value != Guid.Empty && _selectedVehicleId != InitialVehicleId.Value && _allVehicles.Any())
+        {
+            _selectedVehicleId = InitialVehicleId.Value;
+            OnVehicleSelected();
+        }
+    }
+
+    private void OnStartDateTimeChanged()
+    {
+        if (!_isOpenEnded)
+        {
+            _endDateTime = _startDateTime.AddDays(_rentalDays);
+        }
+        RecalculateTotals();
+    }
+
+    private void OnRentalDaysChanged()
+    {
+        if (_rentalDays < 1) _rentalDays = 1;
+        _endDateTime = _startDateTime.AddDays(_rentalDays);
+        RecalculateTotals();
+    }
+
+    private void SetRentalDays(int days)
+    {
+        _rentalDays = Math.Max(1, days);
+        _endDateTime = _startDateTime.AddDays(_rentalDays);
+        RecalculateTotals();
+    }
+
+    private void OnManualEndDateTimeChanged()
+    {
+        var diffDays = (_endDateTime - _startDateTime).TotalDays;
+        _rentalDays = Math.Max(1, (int)Math.Ceiling(diffDays));
+        RecalculateTotals();
+    }
+
+    private void SetContractType(bool isOpenEnded)
+    {
+        _isOpenEnded = isOpenEnded;
+        if (_isOpenEnded)
+        {
+            _totalAgreedAmount = _dailyRate;
+            _paidAmount = 0;
+            _remainingAmount = 0;
+        }
+        else
+        {
+            SetRentalDays(_rentalDays);
+        }
+    }
+
+    private async Task OnCustomerSelected()
+    {
+        if (_selectedCustomerId == Guid.Empty)
+        {
+            _eligibilityCheck = null;
+            return;
+        }
+
+        var customer = _allCustomers.FirstOrDefault(c => c.Id == _selectedCustomerId);
+        if (customer != null)
+        {
+            _eligibilityCheck = await RentalService.CheckCustomerEligibilityAsync(customer.NationalIdOrPassport);
+        }
+    }
+
+    private void OnVehicleSelected()
+    {
+        var vehicle = _allVehicles.FirstOrDefault(v => v.Id == _selectedVehicleId);
+        if (vehicle != null)
+        {
+            if (vehicle.Status != VehicleStatus.Available || vehicle.IsBlockedByCriticalMaintenance)
+            {
+                var reason = vehicle.IsBlockedByCriticalMaintenance 
+                    ? $"متوقفة لتجاوز حد الصيانة الحرجة الإلزامية ({vehicle.CriticalMaintenanceReason ?? "صيانة إلزامية"})" 
+                    : $"حالتها: {vehicle.Status}";
+                _errorMessage = $"عذراً: المركبة ({vehicle.Brand} {vehicle.Model}) غير صالحة للتأجير نهائياً ({reason})! يرجى إنجاز الصيانة أولاً.";
+                _selectedVehicleId = Guid.Empty;
+                return;
+            }
+
+            _errorMessage = null;
+            _dailyRate = vehicle.DailyStandardRate;
+            RecalculateTotals();
+        }
+    }
+
+    private void RecalculateTotals()
+    {
+        if (_isOpenEnded)
+        {
+            _originalAgreedAmount = _dailyRate;
+            _discountType = "None";
+            _discountValue = 0;
+            _discountAmount = 0;
+            _totalAgreedAmount = _dailyRate;
+            _remainingAmount = 0;
+            _paidAmount = 0;
+        }
+        else
+        {
+            _originalAgreedAmount = _rentalDays * _dailyRate;
+            ApplyDiscount();
+        }
+    }
+
+    private void SetDiscountType(string type)
+    {
+        _discountType = type;
+        if (_discountType == "None")
+        {
+            _discountValue = 0;
+            _discountAmount = 0;
+        }
+        else if (_discountValue == 0)
+        {
+            _discountValue = _discountType == "Percentage" ? 10 : 50;
+        }
+        ApplyDiscount();
+    }
+
+    private void SetDiscountPreset(decimal val)
+    {
+        _discountValue = val;
+        ApplyDiscount();
+    }
+
+    private void ApplyDiscount()
+    {
+        if (_discountValue < 0) _discountValue = 0;
+
+        if (_discountType == "Percentage")
+        {
+            if (_discountValue > 100) _discountValue = 100;
+            _discountAmount = Math.Round((_originalAgreedAmount * _discountValue) / 100m, 2);
+        }
+        else if (_discountType == "FixedAmount")
+        {
+            if (_discountValue > _originalAgreedAmount) _discountValue = _originalAgreedAmount;
+            _discountAmount = _discountValue;
+        }
+        else
+        {
+            _discountAmount = 0;
+            _discountValue = 0;
+        }
+
+        _totalAgreedAmount = Math.Max(0, _originalAgreedAmount - _discountAmount);
+
+        if (_paymentMode == PaymentMode.DeferredOnReturn)
+        {
+            _remainingAmount = Math.Max(0, _totalAgreedAmount - _paidAmount);
+        }
+        else
+        {
+            _paidAmount = _totalAgreedAmount;
+            _remainingAmount = 0;
+        }
+    }
+
+    private void OnPaymentModeChanged()
+    {
+        if (_paymentMode == PaymentMode.DeferredOnReturn)
+        {
+            // عند التحويل إلى دفع آجل (ذمم عند التسليم)، نصفر المقبوض فوراً ونحسب كامل المبلغ كدين متبقي
+            _paidAmount = 0;
+            _remainingAmount = _isOpenEnded ? 0 : _totalAgreedAmount;
+        }
+        else
+        {
+            // عند التحويل إلى دفع فوري (نقدي أو بنكي أو بطاقة)
+            if (_paidAmount == 0)
+            {
+                _paidAmount = _isOpenEnded ? 0 : _totalAgreedAmount;
+            }
+            RecalculateRemaining();
+        }
+    }
+
+    private void OnTotalAgreedChanged()
+    {
+        if (_totalAgreedAmount < _originalAgreedAmount)
+        {
+            _discountType = "FixedAmount";
+            _discountAmount = _originalAgreedAmount - _totalAgreedAmount;
+            _discountValue = _discountAmount;
+        }
+        else
+        {
+            _originalAgreedAmount = _totalAgreedAmount;
+            _discountType = "None";
+            _discountAmount = 0;
+            _discountValue = 0;
+        }
+
+        if (_paymentMode == PaymentMode.DeferredOnReturn)
+        {
+            _remainingAmount = Math.Max(0, _totalAgreedAmount - _paidAmount);
+        }
+        else
+        {
+            _paidAmount = _totalAgreedAmount;
+            _remainingAmount = 0;
+        }
+    }
+
+    private void RecalculateRemaining()
+    {
+        if (!_isOpenEnded)
+        {
+            _remainingAmount = Math.Max(0, _totalAgreedAmount - _paidAmount);
+        }
+        else
+        {
+            _remainingAmount = 0;
+        }
+    }
+
+    private Contract? _previewContract;
+    private bool _showContractPreview = false;
+
+    private async Task OpenContractPreview()
+    {
+        _errorMessage = null;
+
+        if (!CanProceed)
+        {
+            _errorMessage = "لا يمكن إصدار العقد لعدم استيفاء الشروط أو أهلية العميل!";
+            return;
+        }
+
+        // ضمان دقة الأرقام المالية قبل فتح المعاينة
+        if (!_isOpenEnded)
+        {
+            _remainingAmount = Math.Max(0, _totalAgreedAmount - _paidAmount);
+        }
+        else
+        {
+            _remainingAmount = 0;
+        }
+
+        var customer = _allCustomers.FirstOrDefault(c => c.Id == _selectedCustomerId);
+        var vehicle = _allVehicles.FirstOrDefault(v => v.Id == _selectedVehicleId);
+
+        var candidateNumber = await RentalService.GetNextContractNumberCandidateAsync();
+
+        _previewContract = new Contract
+        {
+            Id = Guid.NewGuid(),
+            ContractNumber = candidateNumber,
+            CustomerId = _selectedCustomerId,
+            Customer = customer,
+            VehicleId = _selectedVehicleId,
+            Vehicle = vehicle,
+            StartDateTime = _startDateTime,
+            ExpectedReturnDateTime = _isOpenEnded ? _startDateTime.AddDays(30) : _endDateTime,
+            IsOpenEnded = _isOpenEnded,
+            DailyAgreedRate = _dailyRate,
+            DiscountType = _discountType,
+            DiscountValue = _discountValue,
+            DiscountAmount = _discountAmount,
+            OriginalAgreedAmount = _isOpenEnded ? _dailyRate : _originalAgreedAmount,
+            TotalAgreedAmount = _isOpenEnded ? _dailyRate : _totalAgreedAmount,
+            PaidAmount = _paidAmount,
+            RemainingAmount = _isOpenEnded ? 0 : _remainingAmount,
+            PaymentMode = _paymentMode,
+            PromissoryNoteAmount = _promissoryAmount,
+            FuelLevelStart = FuelLevel.Full,
+            AdditionalDriverName = string.IsNullOrWhiteSpace(_additionalDriverName) ? null : _additionalDriverName.Trim(),
+            AdditionalDriverIdNumber = string.IsNullOrWhiteSpace(_additionalDriverId) ? null : _additionalDriverId.Trim(),
+            AdditionalDriverLicenseNumber = string.IsNullOrWhiteSpace(_additionalDriverLicense) ? null : _additionalDriverLicense.Trim(),
+            AdditionalDriverPhone = string.IsNullOrWhiteSpace(_additionalDriverPhone) ? null : _additionalDriverPhone.Trim()
+        };
+
+        _showContractPreview = true;
+    }
+
+    private void HandleBackToEdit()
+    {
+        _showContractPreview = false;
+        _previewContract = null;
+    }
+
+    private async Task ConfirmAndSavePreviewContract()
+    {
+        await SubmitContractInternal(autoPrintDirectly: true);
+    }
+
+    private async Task SubmitContractDirectly()
+    {
+        await SubmitContractInternal(autoPrintDirectly: false);
+    }
+
+    private async Task SubmitContractInternal(bool autoPrintDirectly)
+    {
+        _errorMessage = null;
+
+        if (!CanProceed)
+        {
+            _errorMessage = "لا يمكن إصدار العقد لعدم استيفاء الشروط أو أهلية العميل!";
+            return;
+        }
+
+        try
+        {
+            _isSaving = true;
+
+            // ضبط الحسابات المالية النهائية بدقة لمنع أي تعارض
+            if (!_isOpenEnded)
+            {
+                _remainingAmount = Math.Max(0, _totalAgreedAmount - _paidAmount);
+            }
+            else
+            {
+                _remainingAmount = 0;
+            }
+
+            var contract = new Contract
+            {
+                CustomerId = _selectedCustomerId,
+                Customer = null,
+                VehicleId = _selectedVehicleId,
+                Vehicle = null,
+                StartDateTime = _startDateTime,
+                ExpectedReturnDateTime = _isOpenEnded ? _startDateTime.AddDays(30) : _endDateTime,
+                IsOpenEnded = _isOpenEnded,
+                DailyAgreedRate = _dailyRate,
+                DiscountType = _discountType,
+                DiscountValue = _discountValue,
+                DiscountAmount = _discountAmount,
+                OriginalAgreedAmount = _isOpenEnded ? _dailyRate : _originalAgreedAmount,
+                TotalAgreedAmount = _isOpenEnded ? _dailyRate : _totalAgreedAmount,
+                PaidAmount = _paidAmount,
+                RemainingAmount = _isOpenEnded ? 0 : _remainingAmount,
+                PaymentMode = _paymentMode,
+                PromissoryNoteAmount = _promissoryAmount,
+                FuelLevelStart = FuelLevel.Full,
+                AdditionalDriverName = string.IsNullOrWhiteSpace(_additionalDriverName) ? null : _additionalDriverName.Trim(),
+                AdditionalDriverIdNumber = string.IsNullOrWhiteSpace(_additionalDriverId) ? null : _additionalDriverId.Trim(),
+                AdditionalDriverLicenseNumber = string.IsNullOrWhiteSpace(_additionalDriverLicense) ? null : _additionalDriverLicense.Trim(),
+                AdditionalDriverPhone = string.IsNullOrWhiteSpace(_additionalDriverPhone) ? null : _additionalDriverPhone.Trim()
+            };
+
+            var staffIdentifier = !string.IsNullOrWhiteSpace(AuthState.CurrentUser?.Username) 
+                ? AuthState.CurrentUser.Username 
+                : AuthState.CurrentUser?.FullName ?? "admin";
+
+            var created = await RentalService.CreateContractAsync(contract, staffIdentifier);
+            
+            // Reload full entity with relations
+            var fullContract = await RentalService.GetContractByIdAsync(created.Id);
+            await OnContractCreated.InvokeAsync();
+
+            _showContractPreview = false;
+            _previewContract = null;
+
+            if (autoPrintDirectly)
+            {
+                _createdContractToPrint = fullContract;
+            }
+            else
+            {
+                // إطلاق كشف فحص وتسليم المركبة تلقائياً عند تسليم السيارة للعميل
+                _createdContractToInspect = fullContract;
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.InnerException?.Message ?? ex.Message;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task HandleRollbackNewlyCreatedContract()
+    {
+        if (_createdContractToPrint != null)
+        {
+            try
+            {
+                var staffIdentifier = !string.IsNullOrWhiteSpace(AuthState.CurrentUser?.Username) 
+                    ? AuthState.CurrentUser.Username 
+                    : AuthState.CurrentUser?.FullName ?? "admin";
+
+                await RentalService.RollbackAndDiscardNewContractAsync(_createdContractToPrint.Id, staffIdentifier);
+                _createdContractToPrint = null;
+                await OnContractCreated.InvokeAsync();
+            }
+            catch (Exception ex)
+            {
+                _errorMessage = "تعذر التراجع عن العقد: " + ex.Message;
+            }
+        }
+    }
+
+    private async Task OnHandoverInspectionCompleted()
+    {
+        var c = _createdContractToInspect;
+        _createdContractToInspect = null;
+        if (c != null)
+        {
+            _createdContractToPrint = await RentalService.GetContractByIdAsync(c.Id);
+        }
+    }
+
+    private void OnHandoverInspectionSkipped()
+    {
+        var c = _createdContractToInspect;
+        _createdContractToInspect = null;
+        _createdContractToPrint = c;
+    }
+
+    private async Task OnPrintClosed()
+    {
+        _createdContractToPrint = null;
+        await OnClose.InvokeAsync();
+    }
+}
+
+<style>
+    .contract-mode-btn {
+        padding: 6px 16px;
+        border-radius: 20px;
+        border: none;
+        background: transparent;
+        font-size: 0.84rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .contract-mode-btn:hover {
+        color: var(--wood-walnut);
+    }
+    .contract-mode-btn.active {
+        background: #ffffff;
+        color: var(--primary-blue);
+        box-shadow: 0 2px 8px rgba(2, 132, 199, 0.18);
+        font-weight: 800;
+    }
+    .contract-mode-btn.active-open {
+        background: #f59e0b;
+        color: #ffffff;
+        box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);
+        font-weight: 800;
+    }
+    .btn-day-chip {
+        padding: 5px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border-color);
+        background: #ffffff;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-main);
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .btn-day-chip:hover {
+        border-color: var(--primary-blue);
+        background: #f0f9ff;
+        color: var(--primary-blue);
+        transform: translateY(-1px);
+    }
+    .btn-preview-contract {
+        transition: all 0.2s ease;
+    }
+    .btn-preview-contract:hover {
+        background: linear-gradient(135deg, #0369a1 0%, #075985 100%) !important;
+        box-shadow: 0 6px 18px rgba(2, 132, 199, 0.45) !important;
+        transform: translateY(-1px);
+    }
+    .btn-preview-contract:active {
+        transform: translateY(0);
+    }
+</style>

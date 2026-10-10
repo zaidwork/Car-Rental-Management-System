@@ -1,0 +1,191 @@
+@page "/blacklist"
+@inject IRentalSystemService RentalService
+@inject IAuthStateService AuthState
+
+<div style="display: flex; flex-direction: column; gap: 20px;">
+    <!-- Top Bar -->
+    <div class="action-bar-strip">
+        <div class="action-bar-left">
+            <h2 style="font-size: 1.25rem; font-weight: 800; color: #ef4444; display: flex; align-items: center; gap: 8px;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                </svg>
+                <span>القائمة السوداء وإدارة الحظر (Blacklist Management)</span>
+            </h2>
+            <span style="font-size: 0.84rem; color: var(--text-muted); font-weight: 500;">
+                منع تلقائي من فتح أي عقد تأجير - فك الحظر محصور حصراً بمدير النظام (Admin)
+            </span>
+        </div>
+
+        @if (!AuthState.IsAdmin)
+        {
+            <div style="background: var(--accent-red-bg); border: 1.5px solid var(--accent-red-border); padding: 6px 14px; border-radius: 6px; font-size: 0.82rem; color: var(--accent-red); font-weight: 700;">
+                🔒 حساب موظف الاستقبال: ليس لديك صلاحية فك الحظر (محصورة بالـ Admin)
+            </div>
+        }
+        else
+        {
+            <div style="background: var(--primary-bg); border: 1.5px solid #bae6fd; padding: 6px 14px; border-radius: 6px; font-size: 0.82rem; color: var(--primary-blue); font-weight: 700;">
+                👑 حساب الآدمن: مصرح لك برفع الحظر مع تدوين السبب الإلزامي في سجل التدقيق
+            </div>
+        }
+    </div>
+
+    <!-- Blacklist Records Table -->
+    <div class="data-table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>اسم العميل</th>
+                    <th>رقم الهوية الوطنية</th>
+                    <th>سبب الإدراج بالحظر</th>
+                    <th>تاريخ الحظر</th>
+                    <th>الموظف المدرج</th>
+                    <th>حالة القيد</th>
+                    <th>تاريخ وسبب فك الحظر</th>
+                    <th>الإجراء</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_records != null && _records.Any())
+                {
+                    @foreach (var r in _records)
+                    {
+                        <tr>
+                            <td style="font-weight: 800; color: var(--text-main);">@(r.Customer?.FullName ?? "عميل مسجل")</td>
+                            <td style="font-family: monospace; color: var(--accent-red); font-weight: bold;">@r.NationalId</td>
+                            <td style="max-width: 250px; font-size: 0.86rem; color: var(--text-dark);">@r.Reason</td>
+                            <td>@r.BlockedAt.ToString("yyyy/MM/dd HH:mm")</td>
+                            <td>@r.BlockedByUsername</td>
+                            <td>
+                                @if (r.IsBlocked)
+                                {
+                                    <span style="background: var(--accent-red-bg); color: var(--accent-red); border: 1px solid var(--accent-red-border); padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 0.78rem;">
+                                        ⛔ محظور حالياً
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span style="background: var(--accent-green-bg); color: var(--accent-green); border: 1px solid var(--accent-green-border); padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 0.78rem;">
+                                        ✓ تم رفع الحظر
+                                    </span>
+                                }
+                            </td>
+                            <td style="font-size: 0.82rem; color: var(--text-muted);">
+                                @if (!r.IsBlocked)
+                                {
+                                    <div>بواسطة: @r.UnblockedByUsername (@r.UnblockedAt?.ToString("yyyy/MM/dd"))</div>
+                                    <div style="color: var(--text-muted);">السبب: @r.UnblockReason</div>
+                                }
+                                else
+                                {
+                                    <span>-</span>
+                                }
+                            </td>
+                            <td>
+                                @if (r.IsBlocked)
+                                {
+                                    @if (AuthState.IsAdmin)
+                                    {
+                                        <button class="btn-primary-action" style="background: var(--accent-green); border-color: var(--accent-green); font-size: 0.78rem; padding: 5px 12px;" @onclick="() => OpenUnblockModal(r)">
+                                            فك الحظر (Admin)
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button class="filter-pill" disabled style="opacity: 0.5; cursor: not-allowed;" title="غير مصرح لموظف الاستقبال برفع الحظر">
+                                            محظور (معزول)
+                                        </button>
+                                    }
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 45px 20px;">
+                            <div class="empty-state-card" style="border: none; background: transparent; padding: 10px; margin: 0 auto;">
+                                <div class="empty-state-icon" style="background: var(--accent-green-bg); color: var(--accent-green); border-color: var(--accent-green-border);">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="empty-state-title">سجل القائمة السوداء نظيف تماماً</div>
+                                <div class="empty-state-sub">لا يوجد أي عملاء محظورين في النظام حالياً. كافة العملاء يتمتعون بسجل ائتماني وقانوني نظيف ومصرح لهم بالتعاقد.</div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Unblock Confirmation (Admin Only) -->
+@if (_recordToUnblock != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-card" style="max-width: 540px;">
+            <div class="modal-header">
+                <div class="modal-title" style="color: #10b981;">فك الحظر عن العميل (صلاحية إدارية خاصة)</div>
+                <button class="btn-close-modal" @onclick="() => _recordToUnblock = null">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.9rem; color: var(--text-main);">
+                    أنت بصدد رفع الحظر عن العميل: <strong>@(_recordToUnblock.Customer?.FullName)</strong> (هوية: @_recordToUnblock.NationalId).
+                </p>
+                <div style="background: var(--accent-red-bg); border: 1px solid var(--accent-red-border); padding: 10px; border-radius: 6px; font-size: 0.82rem; color: var(--accent-red); margin: 10px 0; font-weight: 600;">
+                    سبب الحظر المسجل سابقاً: @_recordToUnblock.Reason
+                </div>
+                <div class="form-group">
+                    <label class="form-label">سبب فك الحظر الإلزامي (سيدرج في سجل الـ Audit Log الأمني):</label>
+                    <textarea class="form-control" rows="3" @bind="_unblockReason" placeholder="مثال: تم سداد كافة المبالغ العالقة والتسوية الودية..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="filter-pill" @onclick="() => _recordToUnblock = null">إلغاء</button>
+                <button class="btn-primary-action" style="background: #10b981;" @onclick="ConfirmUnblock">
+                    اعتماد فك الحظر وتوثيق السجل
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<BlacklistRecord>? _records;
+    private BlacklistRecord? _recordToUnblock;
+    private string _unblockReason = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthState.OnUserChanged += StateHasChanged;
+        await LoadBlacklist();
+    }
+
+    private async Task LoadBlacklist()
+    {
+        _records = await RentalService.GetBlacklistRecordsAsync();
+    }
+
+    private void OpenUnblockModal(BlacklistRecord record)
+    {
+        _recordToUnblock = record;
+        _unblockReason = "";
+    }
+
+    private async Task ConfirmUnblock()
+    {
+        if (string.IsNullOrWhiteSpace(_unblockReason)) return;
+        if (_recordToUnblock != null)
+        {
+            await RentalService.UnblockCustomerAsync(_recordToUnblock.CustomerId, _unblockReason, AuthState.CurrentUser.FullName);
+            _recordToUnblock = null;
+            await LoadBlacklist();
+        }
+    }
+}

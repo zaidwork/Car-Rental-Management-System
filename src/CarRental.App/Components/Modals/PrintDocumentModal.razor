@@ -1,0 +1,1486 @@
+@using CarRental.Core.Entities
+@using CarRental.Core.Enums
+@using CarRental.Core.Helpers
+@using CarRental.Core.Interfaces
+@using CarRental.Infrastructure.Helpers
+@inject IRentalSystemService RentalService
+@inject IJSRuntime JSRuntime
+
+@if (Contract != null)
+{
+<div class="modal-overlay">
+    <div class="modal-card" style="max-width: 980px; width: 95%;">
+        <!-- Modal Top Chrome (Non-Printable) -->
+        <div class="modal-header no-print">
+            <div class="modal-title">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-blue)" stroke-width="2">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                <span>طباعة الوثائق الرسمية المعتمدة للعقد (@Contract.ContractNumber)</span>
+            </div>
+            <button class="btn-close-modal" @onclick="HandleCloseOrBack">×</button>
+        </div>
+
+        @if (IsPendingConfirmation)
+        {
+            <div class="pending-review-banner no-print" style="margin: 10px 20px 0; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2px solid #f59e0b; border-radius: 10px; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.5rem;">📋</span>
+                    <div>
+                        <div style="font-weight: 900; color: #92400e; font-size: 0.96rem;">
+                            مرحلة مراجعة وتدقيق العقد (قبل التأكيد والاعتماد النهائي)
+                        </div>
+                        <div style="font-size: 0.82rem; color: #b45309; font-weight: 600;">
+                            راجع بيانات العقد، الأسعار، والمواعيد بدقة. يمكنك النقر على "الرجوع لتعديل البيانات" لتعديل أي حقل فوراً، أو النقر على "تأكيد العقد والطباعة".
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn-back-to-edit" style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important; border: 2px solid #f59e0b !important; color: #ffffff !important; font-weight: 900; padding: 7px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(180, 83, 9, 0.35); text-decoration: none;" @onclick="HandleBackToEdit">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5">
+                        <line x1="19" y1="12" x2="5" y2="12"></line>
+                        <polyline points="12 19 5 12 12 5"></polyline>
+                    </svg>
+                    <span style="color: #ffffff !important; font-weight: 900;">↩ الرجوع لتعديل البيانات</span>
+                </button>
+            </div>
+        }
+        else if (CanRollbackNewContract)
+        {
+            <div class="pending-review-banner no-print" style="margin: 10px 20px 0; background: #fdf2f2; border: 2px solid #f87171; border-radius: 10px; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.3rem;">ℹ️</span>
+                    <span style="font-size: 0.84rem; color: #991b1b; font-weight: 700;">
+                        العقد مسجل حديثاً؛ إذا كان هناك خطأ في البيانات وترغب بتصحيحها، يمكنك التراجع عنه فوراً دون أي قيود.
+                    </span>
+                </div>
+                <button type="button" class="filter-pill" style="background: #ffffff; border: 1.5px solid #dc2626; color: #dc2626; font-weight: 800; cursor: pointer;" @onclick="HandleBackToEdit">
+                    <span>↩ تراجع والعودة لتعديل البيانات</span>
+                </button>
+            </div>
+        }
+
+        <!-- Company Switcher Bar (Non-Printable) -->
+        <div class="company-switcher-bar no-print" style="display: flex; gap: 12px; align-items: center; padding: 10px 20px; background: #e8e1d2; border-bottom: 1.5px solid var(--border-color); flex-wrap: wrap; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 0.88rem; color: #451a03;">
+                <span>👑 جهة إصدار وترخيص العقد:</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button type="button" 
+                        class="filter-pill @(_selectedCompany == "samara" ? "active" : "")" 
+                        style="cursor: pointer; font-weight: bold; border: 1.5px solid @(_selectedCompany == "samara" ? "#b45309" : "#cbd5e1");"
+                        @onclick='() => _selectedCompany = "samara"'>
+                    🏢 شركة سمارة (مشتغل: 562171389)
+                </button>
+                <button type="button" 
+                        class="filter-pill @(_selectedCompany == "altaj" ? "active" : "")" 
+                        style="cursor: pointer; font-weight: bold; border: 1.5px solid @(_selectedCompany == "altaj" ? "#b45309" : "#cbd5e1");"
+                        @onclick='() => _selectedCompany = "altaj"'>
+                    👑 شركة التاج (مشتغل: 562514273)
+                </button>
+            </div>
+            <span style="font-size: 0.78rem; color: #78350f; margin-right: auto;">
+                (اختر الشركة لطباعة الترويسة وأرقام التراخيص والشروط باسمها)
+            </span>
+        </div>
+
+        <!-- Document Selector Tabs (Non-Printable) -->
+        <div class="doc-selector-tabs no-print" style="display: flex; gap: 8px; padding: 10px 20px; background: #f2ede4; border-bottom: 1.5px solid var(--border-color); overflow-x: auto; flex-shrink: 0;">
+            <button class="filter-pill @(_currentDoc == "contract_both" ? "active" : "")" @onclick='() => SelectDocument("contract_both")'>
+                📑 1. طباعة العقد وجه وقفا (صفحة A4 كاملة - معتمد)
+            </button>
+            <button class="filter-pill @(_currentDoc == "contract_front" ? "active" : "")" @onclick='() => SelectDocument("contract_front")'>
+                📄 2. وجه العقد فقط (صفحة 1)
+            </button>
+            <button class="filter-pill @(_currentDoc == "contract_back" ? "active" : "")" @onclick='() => SelectDocument("contract_back")'>
+                📜 3. قفا العقد فقط (شروط التأجير)
+            </button>
+            <button class="filter-pill @(_currentDoc == "note" ? "active" : "")" @onclick='() => SelectDocument("note")'>
+                ✍️ 4. كمبيالة الضمان الرسمية
+            </button>
+            <button class="filter-pill @(_currentDoc == "inspection" ? "active" : "")" @onclick='() => SelectDocument("inspection")'>
+                🔍 5. محضر المعاينة والفحص الفني
+            </button>
+            <button class="filter-pill @(_currentDoc == "receipt" ? "active" : "")" @onclick='() => SelectDocument("receipt")'>
+                💵 6. سند قبض مالي رسمي
+            </button>
+            <button class="filter-pill @(_currentDoc == "payment" ? "active" : "")" @onclick='() => SelectDocument("payment")'>
+                💸 7. سند صرف مالي رسمي
+            </button>
+        </div>
+
+        <!-- Printable Document Area -->
+        <div class="modal-body" id="printableContractContainer" style="background: #e5ded0; padding: 20px; flex: 1 1 auto; min-height: 0; overflow-y: auto;">
+            
+            @if (_currentDoc == "contract_front" || _currentDoc == "contract_both")
+            {
+                <!-- ==================== PAGE 1: OFFICIAL CONTRACT FRONT (وجه العقد الرسمي المعتمد) ==================== -->
+                <div class="printable-document contract-a4-sheet @(_currentDoc == "contract_both" ? "contract-both-front" : "")" id="printableContractFront" dir="rtl" style="direction: rtl; text-align: right; background: #ffffff; color: #000000; border: 2px solid #000000; border-radius: 6px; padding: 4mm 6mm; font-family: 'Cairo', 'Tajawal', sans-serif;">
+                    
+                    <!-- 1. Master Header Box with Exact Pill Layout and Royal Crown Center -->
+                    <div style="border: 2px solid #000000; border-radius: 10px; padding: 4px 10px; margin-bottom: 4px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; direction: rtl; background: #ffffff;">
+                        
+                        <!-- Right Column (Arabic Header) -->
+                        <div style="text-align: right; line-height: 1.25;">
+                            <div style="font-weight: 900; font-size: 1.15rem; color: #000000; letter-spacing: 0.5px;">@ActiveCompanyNameAr</div>
+                            <div style="font-weight: 700; font-size: 0.82rem; color: #000000; margin-bottom: 2px;">@ActiveCompanySubtitleAr</div>
+                            
+                            <!-- Pill Box for Location & Phones -->
+                            <div style="border: 1.5px solid #000000; border-radius: 16px; padding: 2px 10px; display: inline-block; text-align: center; width: 100%; box-sizing: border-box; background: #ffffff;">
+                                <div style="font-size: 0.72rem; font-weight: 800; color: #000000;">@ActiveCompanyAddressAr</div>
+                                <div style="font-size: 0.72rem; font-weight: 900; font-family: monospace; color: #000000; letter-spacing: 0.5px;">@ActiveCompanyPhones</div>
+                            </div>
+                        </div>
+
+                        <!-- Center Column (Crown Logo & Authorized Dealer Number) -->
+                        <div style="text-align: center; padding: 0 8px; min-width: 170px;">
+                            <svg width="46" height="30" viewBox="0 0 100 64" fill="#000000" style="display: block; margin: 0 auto 1px;">
+                                <path d="M12 24 L28 42 L50 12 L72 42 L88 24 L80 48 L20 48 Z" />
+                                <circle cx="12" cy="20" r="4.5" />
+                                <circle cx="50" cy="8" r="5.5" />
+                                <circle cx="88" cy="20" r="4.5" />
+                                <circle cx="31" cy="32" r="3" />
+                                <circle cx="69" cy="32" r="3" />
+                                <path d="M15 52 C35 48, 65 48, 85 52 C82 58, 18 58, 15 52 Z" />
+                            </svg>
+                            <div style="font-weight: 900; font-size: 0.85rem; letter-spacing: 2px; line-height: 1; text-transform: uppercase;">@ActiveCompanyBrandEn</div>
+                            <div style="font-weight: 900; font-size: 1.15rem; letter-spacing: 1px; line-height: 1.1;">@ActiveCompanyBrandAr</div>
+                            <div style="font-size: 0.65rem; font-weight: 800; margin-top: 2px; white-space: nowrap;">
+                                <span>Authorized Dealer No</span>
+                                <span style="font-family: monospace; font-size: 0.72rem; font-weight: 900; padding: 0 3px;">@ActiveCompanyDealerNo</span>
+                                <span>مشتغل مرخص رقم</span>
+                            </div>
+                        </div>
+
+                        <!-- Left Column (English Header) -->
+                        <div style="text-align: left; line-height: 1.25; direction: ltr;">
+                            <div style="font-weight: 900; font-size: 1.10rem; color: #000000; letter-spacing: 1px; text-transform: uppercase;">@ActiveCompanyNameEn</div>
+                            <div style="font-weight: 700; font-size: 0.82rem; color: #000000; margin-bottom: 2px;">@ActiveCompanySubtitleEn</div>
+                            
+                            <!-- Pill Box for Location & Phones (English) -->
+                            <div style="border: 1.5px solid #000000; border-radius: 16px; padding: 2px 10px; display: inline-block; text-align: center; width: 100%; box-sizing: border-box; background: #ffffff;">
+                                <div style="font-size: 0.72rem; font-weight: 800; color: #000000;">@ActiveCompanyAddressEn</div>
+                                <div style="font-size: 0.72rem; font-weight: 900; font-family: monospace; color: #000000; letter-spacing: 0.5px;">@ActiveCompanyPhones</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Rental Agreement Number Bar -->
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #000000; padding: 2px 8px 4px; margin-bottom: 4px; font-weight: 900; direction: rtl;">
+                        <span style="font-size: 1.15rem; font-weight: 900;">إتفاقية تأجير رقم</span>
+                        <div style="font-size: 1.15rem; font-family: monospace; display: flex; align-items: baseline; gap: 6px;">
+                            <span style="font-family: 'Times New Roman', serif; font-style: italic; font-weight: bold; font-size: 1.25rem;">No. :</span>
+                            <span style="border-bottom: 1.5px solid #000; padding: 0 14px; font-weight: 900; font-size: 1.3rem;">@(Contract.ContractNumber)</span>
+                        </div>
+                        <span style="font-size: 1.05rem; font-weight: 800; letter-spacing: 0.5px; direction: ltr;">Rental Agreement</span>
+                    </div>
+
+                    <!-- 3. Form Grid: Two Columns (Right: Renter Details, Left: Vehicle & In/Out Table) -->
+                    <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 6px; flex: 1 1 auto; margin-bottom: 4px; direction: rtl;">
+                        
+                        <!-- RIGHT BOX (Column 1 in RTL): Renter Details, Terms & Signatures -->
+                        <div style="border: 2px solid #000000; border-radius: 4px; display: flex; flex-direction: column; justify-content: space-between; font-size: 0.74rem; background: #ffffff;">
+                            
+                            <div style="display: flex; flex-direction: column;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Renter</span>
+                                    <span style="font-weight: 900; font-size: 0.84rem; text-align: center; flex: 1;">@Contract.Customer?.FullName</span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">المستأجر</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Place Of Residence</span>
+                                    <span style="font-weight: 800; text-align: center; flex: 1;">@(string.IsNullOrEmpty(Contract.Customer?.Address) ? "طوباس - فلسطين" : Contract.Customer?.Address)</span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">بلد المستأجر</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">ID.No. & Birth Date</span>
+                                    <span style="font-weight: 900; font-family: monospace; text-align: center; flex: 1;">
+                                        @Contract.Customer?.NationalIdOrPassport 
+                                        @(Contract.Customer != null ? $" | {Contract.Customer.DateOfBirth:yyyy/MM/dd}" : "")
+                                    </span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">رقم الهوية / تاريخ الميلاد</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">ID.No. & Exp. Date</span>
+                                    <span style="font-weight: 900; font-family: monospace; text-align: center; flex: 1;">
+                                        @Contract.Customer?.LicenseNumber (تنتهي: @Contract.Customer?.LicenseExpiryDate.ToString("yyyy/MM/dd"))
+                                    </span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">الرخصة / رقمها / تاريخ انتهائها</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Address</span>
+                                    <span style="font-weight: 800; text-align: center; flex: 1;">@Contract.Customer?.Address</span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">العنوان</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Tel .</span>
+                                    <span style="font-weight: 900; font-family: monospace; text-align: center; flex: 1;">
+                                        @Contract.Customer?.PrimaryPhone 
+                                        @(!string.IsNullOrEmpty(Contract.Customer?.EmergencyPhone) ? $" | {Contract.Customer?.EmergencyPhone}" : "")
+                                    </span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">هاتف</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Addational Drivers</span>
+                                    <span style="font-weight: 800; text-align: center; flex: 1;">
+                                        @(!string.IsNullOrWhiteSpace(Contract.AdditionalDriverName) ? Contract.AdditionalDriverName : "لا يوجد")
+                                    </span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">سائقين اخرين</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Addational Information</span>
+                                    <span style="font-weight: 700; text-align: center; flex: 1; font-size: 0.72rem;">@(string.IsNullOrEmpty(Contract.Notes) ? "تأجير سياحي رسمي معتمد" : Contract.Notes)</span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">معلومات اخرى</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px; background: #fafafa;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Payments</span>
+                                    <span style="font-weight: 900; font-size: 0.74rem; text-align: center; flex: 1;">
+                                        @if (Contract.DiscountAmount > 0)
+                                        {
+                                            <span>الأساسي: @Contract.OriginalAgreedAmount.ToString("N0") ₪ | الخصم: -@Contract.DiscountAmount.ToString("N0") ₪ @(Contract.DiscountType == "Percentage" ? $"({Contract.DiscountValue}%)" : "") | الصافي: @Contract.TotalAgreedAmount.ToString("N0") ₪ | مقبوض: @Contract.PaidAmount.ToString("N0") ₪ | متبقي: @Contract.RemainingAmount.ToString("N0") ₪</span>
+                                        }
+                                        else if (Contract.IsOpenEnded)
+                                        {
+                                            <span>حساب يومي مفتوح: @Contract.DailyAgreedRate.ToString("N0") ₪/يوم | مقبوض مقدم: @Contract.PaidAmount.ToString("N0") ₪ | تسوية يومية</span>
+                                        }
+                                        else if (Contract.PaymentMode == PaymentMode.DeferredOnReturn)
+                                        {
+                                            <span>دفع آجل (ذمم عند التسليم) | الإجمالي: @Contract.TotalAgreedAmount.ToString("N0") ₪ | مقبوض مقدماً: @Contract.PaidAmount.ToString("N0") ₪ | متبقي دين: @Contract.RemainingAmount.ToString("N0") ₪</span>
+                                        }
+                                        else
+                                        {
+                                            <span>الإجمالي: @Contract.TotalAgreedAmount.ToString("N0") ₪ | مقبوض: @Contract.PaidAmount.ToString("N0") ₪ | متبقي: @Contract.RemainingAmount.ToString("N0") ₪</span>
+                                        }
+                                    </span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">الدفعات</span>
+                                </div>
+                            </div>
+
+                            <!-- Legal Warning Footer -->
+                            <div style="border-top: 1.5px solid #000; padding: 4px 6px; text-align: center; font-weight: 900; font-size: 0.70rem; background: #ffffff; margin-top: auto;">
+                                ملاحظة : يتحمل المستأجر أية مخالفة أو مسؤولية قانونية من تاريخ وساعة استلام السيارة تكون السيارة طرفاً فيها
+                            </div>
+                        </div>
+
+                        <!-- LEFT BOX (Column 2 in RTL): Vehicle Details & In/Out Logistics -->
+                        <div style="border: 2px solid #000000; border-radius: 4px; display: flex; flex-direction: column; justify-content: space-between; font-size: 0.74rem; background: #ffffff;">
+                            
+                            <!-- Vehicle Details Rows -->
+                            <div style="display: flex; flex-direction: column;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Car</span>
+                                    <span style="font-weight: 900; font-size: 0.82rem; text-align: center; flex: 1;">@Contract.Vehicle?.Brand @Contract.Vehicle?.Model (@Contract.Vehicle?.ModelYear)</span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">السيارة</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Licence</span>
+                                    <span style="font-weight: 900; font-family: monospace; font-size: 0.88rem; text-align: center; flex: 1;">@Contract.Vehicle?.PlateNumber</span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">رقم السيارة</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">No. Of return</span>
+                                    <span style="font-weight: 900; text-align: center; flex: 1;">@(Contract.IsOpenEnded ? $"{GetRentalDurationDays()} يوم (مفتوح)" : $"{GetRentalDurationDays()} يوم")</span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">عدد الأيام</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Date of Day</span>
+                                    <span style="font-weight: 900; font-family: monospace; text-align: center; flex: 1;">@(Contract.IsOpenEnded ? "عقد مفتوح (حسب الطلب)" : Contract.ExpectedReturnDateTime.ToString("yyyy/MM/dd"))</span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">تاريخ الإرجاع</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Daily Charges</span>
+                                    <span style="font-weight: 900; text-align: center; flex: 1;">@Contract.DailyAgreedRate.ToString("N0") ₪</span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">الأجرة اليومية</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Car Out By</span>
+                                    <span style="font-weight: 800; text-align: center; flex: 1;">@(string.IsNullOrEmpty(Contract.CreatedByStaffName) ? "الإدارة" : Contract.CreatedByStaffName)</span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">اخراج السيارة</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding: 3px 6px;">
+                                    <span style="font-size: 0.70rem; color: #1e293b; direction: ltr; font-weight: 600; width: 28%; text-align: left;">Out checked By</span>
+                                    <span style="font-weight: 800; text-align: center; flex: 1;">@(string.IsNullOrEmpty(Contract.CreatedByStaffName) ? "فحص معتمد" : Contract.CreatedByStaffName)</span>
+                                    <span style="font-weight: 800; width: 28%; text-align: right;">فحص السيارة</span>
+                                </div>
+                            </div>
+
+                            <!-- In / Out Logistics Sub-table -->
+                            <div style="border-top: 1.5px solid #000000; margin-top: auto;">
+                                <table style="width: 100%; border-collapse: collapse; text-align: center; font-size: 0.72rem; direction: rtl;">
+                                    <thead>
+                                        <tr style="background: #f8fafc; border-bottom: 1px solid #000;">
+                                            <th style="padding: 3px 4px; border-left: 1px solid #000; width: 34%; font-weight: 800; text-align: right;">Date التاريخ</th>
+                                            <th style="padding: 3px 4px; border-left: 1px solid #000; width: 33%; font-weight: 900;">Out إخراج</th>
+                                            <th style="padding: 3px 4px; width: 33%; font-weight: 900;">In إدخال</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr style="border-bottom: 1px solid #000;">
+                                            <td style="padding: 3px 4px; font-weight: 800; border-left: 1px solid #000; text-align: right;">التاريخ</td>
+                                            <td style="padding: 3px 4px; font-family: monospace; font-weight: 700; border-left: 1px solid #000;">@Contract.StartDateTime.ToString("yyyy/MM/dd")</td>
+                                            <td style="padding: 3px 4px; font-family: monospace; font-weight: 700;">@(Contract.IsOpenEnded ? (Contract.ActualReturnDateTime.HasValue ? Contract.ActualReturnDateTime.Value.ToString("yyyy/MM/dd") : "مفتوح") : Contract.ExpectedReturnDateTime.ToString("yyyy/MM/dd"))</td>
+                                        </tr>
+                                        <tr style="border-bottom: 1px solid #000;">
+                                            <td style="padding: 3px 4px; font-weight: 800; border-left: 1px solid #000; text-align: right;">Time ساعة</td>
+                                            <td style="padding: 3px 4px; font-family: monospace; font-weight: 700; border-left: 1px solid #000;">@Contract.StartDateTime.ToString("hh:mm tt")</td>
+                                            <td style="padding: 3px 4px; font-family: monospace; font-weight: 700;">@(Contract.IsOpenEnded ? (Contract.ActualReturnDateTime.HasValue ? Contract.ActualReturnDateTime.Value.ToString("hh:mm tt") : "مفتوح") : Contract.ExpectedReturnDateTime.ToString("hh:mm tt"))</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding: 3px 4px; font-weight: 800; border-left: 1px solid #000; text-align: right;">RM reading عداد</td>
+                                            <td style="padding: 3px 4px; font-family: monospace; font-weight: 900; border-left: 1px solid #000;">@Contract.StartOdometer.ToString("N0")</td>
+                                            <td style="padding: 3px 4px; font-family: monospace; font-weight: 700;">@(Contract.EndOdometer.HasValue ? $"{Contract.EndOdometer.Value:N0}" : ".........")</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Vehicle Condition & Inspection Blueprint (Large Comprehensive 5-Angle Blueprint) -->
+                    <div style="border: 2px solid #000000; border-radius: 4px; padding: 3px 6px; background: #ffffff;">
+                        <div style="font-size: 0.68rem; font-weight: 800; margin-bottom: 2px; display: flex; justify-content: space-between; padding: 0 4px; border-bottom: 1px solid #000; padding-bottom: 2px;">
+                            <span style="font-size: 0.65rem; color: #1e293b; direction: ltr; font-weight: 700;">Vehicle Inspection Blueprint (All 5 Angles)</span>
+                            <span style="font-weight: 900; font-size: 0.74rem;">مخطط فحص ومعاينة هيكل السيارة الشامل والخدوش (الزوايا الخمس كاملة)</span>
+                        </div>
+                        
+                        <!-- Large Blueprint Stage with 100% Exact Tight Alignment -->
+                        <div style="position: relative; width: 100%; text-align: center; line-height: 0; background: #ffffff; padding: 2px 0;">
+                            <div style="position: relative; display: inline-block; height: 50mm; width: calc(50mm * 1590 / 696); max-width: 100%; line-height: 0; margin: 0 auto;">
+                                <img src="images/inspection/car_all_clean.png" 
+                                     alt="مخطط فحص ومعاينة هيكل السيارة" 
+                                     style="display: block; width: 100%; height: 100%; margin: 0; padding: 0;" />
+
+                                <!-- Angle Indicator Labels on Blueprint -->
+                                <div style="position: absolute; top: 1.5%; left: 0.8%; background: rgba(0,0,0,0.72); color: #fff; font-size: 8px; font-weight: 800; padding: 1px 5px; border-radius: 2px; line-height: 1.1; pointer-events: none;">🚘 أمامي</div>
+                                <div style="position: absolute; top: 1.5%; left: 45%; transform: translateX(-50%); background: rgba(0,0,0,0.72); color: #fff; font-size: 8px; font-weight: 800; padding: 1px 5px; border-radius: 2px; line-height: 1.1; pointer-events: none;">🚙 جانبي</div>
+                                <div style="position: absolute; top: 1.5%; right: 0.8%; background: rgba(0,0,0,0.72); color: #fff; font-size: 8px; font-weight: 800; padding: 1px 5px; border-radius: 2px; line-height: 1.1; pointer-events: none;">🚗 خلفي</div>
+                                <div style="position: absolute; bottom: 1.5%; left: 0.8%; background: rgba(0,0,0,0.72); color: #fff; font-size: 8px; font-weight: 800; padding: 1px 5px; border-radius: 2px; line-height: 1.1; pointer-events: none;">🏎️ أمامي مجسم</div>
+                                <div style="position: absolute; bottom: 1.5%; right: 0.8%; background: rgba(0,0,0,0.72); color: #fff; font-size: 8px; font-weight: 800; padding: 1px 5px; border-radius: 2px; line-height: 1.1; pointer-events: none;">🏎️ خلفي مجسم</div>
+
+                                <!-- Placed Damage Marks (Pinpoint Precision) -->
+                                @for (int i = 0; i < _vehicleDamageMarks.Count; i++)
+                                {
+                                    var mark = _vehicleDamageMarks[i];
+                                    var coords = GetUniversalMarkCoordinates(mark);
+                                    var idx = i + 1;
+                                    <div style="position: absolute; left: @(coords.X.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%; top: @(coords.Y.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                        <div style="width: 18px; height: 18px; border-radius: 50%; background: #dc2626; color: #ffffff; border: 2px solid #ffffff; box-shadow: 0 0 3px #000; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; font-family: monospace;">
+                                            @idx
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Inspection Status Badge & Damages Legend -->
+                        @if (_vehicleDamageMarks.Count > 0)
+                        {
+                            <div style="border-top: 1px solid #000; margin-top: 2px; padding: 2px 6px; font-size: 0.68rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; background: #fffcf0;">
+                                <strong style="color: #b91c1c; font-size: 0.72rem;">⚠️ سجل الأضرار والخدوش المسجلة (@_vehicleDamageMarks.Count):</strong>
+                                @for (int i = 0; i < _vehicleDamageMarks.Count; i++)
+                                {
+                                    var m = _vehicleDamageMarks[i];
+                                    <span style="background: #ffffff; border: 1.2px solid #dc2626; border-radius: 3px; padding: 1px 6px; font-size: 0.64rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+                                        <span style="background: #dc2626; color: #fff; width: 14px; height: 14px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 900;">@(i + 1)</span>
+                                        <span style="color: #991b1b;">@m.DamageType</span>
+                                        <span style="color: #334155;">@(!string.IsNullOrWhiteSpace(m.Description) ? $"({m.Description})" : "")</span>
+                                        <span style="color: #64748b; font-size: 0.60rem;">[@GetViewArabicName(m.ViewType)]</span>
+                                    </span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="border-top: 1px solid #000; margin-top: 2px; padding: 2px 6px; text-align: center; font-size: 0.68rem; color: #15803d; font-weight: 800; background: #f0fdf4;">
+                                ✓ المركبة خالية من أي خدوش أو أضرار ظاهرة عند التسليم واستلمت بحالة فنية ممتازة
+                            </div>
+                        }
+                    </div>
+
+                    <!-- 5. Official Contract Declaration & Dual Signatures Section (الصفحة الأولى) -->
+                    <div style="border: 2px solid #000000; border-radius: 4px; padding: 4px 8px; background: #ffffff; margin-top: 4px;">
+                        <!-- Legal Declaration & Confirmation -->
+                        <div style="font-size: 0.63rem; font-weight: 800; text-align: justify; line-height: 1.25; border-bottom: 1.5px solid #000; padding-bottom: 3px; margin-bottom: 3px;">
+                            <strong>إقرار وتعهد:</strong> لقد قرأت واطلعت على كافة التعليمات والشروط المذكورة على جانبي هذه الاتفاقية ووافقت والتزمت بها، وأقر باستلام السيارة الموصوفة بحالة فنية سليمة ومطابقة للمعاينة، وأتعهد بالعمل بموجب هذا الاتفاق ويتحمل المستأجر أية مسؤولية أو مخالفة قانونية من تاريخ وساعة استلام السيارة.
+                        </div>
+                        
+                        <!-- Dual Signature Blocks: Renter & Company -->
+                        <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 10px; align-items: flex-end;">
+                            <!-- Right Block: Renter Signature -->
+                            <div style="border: 1px solid #000; border-radius: 3px; padding: 3px 8px; background: #fafafa;">
+                                <div style="font-weight: 900; font-size: 0.72rem; margin-bottom: 2px; display: flex; justify-content: space-between; border-bottom: 1px dashed #94a3b8; padding-bottom: 1px;">
+                                    <span>✍️ توقيع وإقرار المستأجر (Renter Sign)</span>
+                                    <span style="font-size: 0.62rem; color: #475569; font-weight: 700;">(توقيع ملزم ونافذ)</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.68rem; margin-bottom: 1px;">
+                                    <span><strong>الاسم:</strong> @Contract.Customer?.FullName</span>
+                                    <span><strong>الهوية:</strong> <span style="font-family: monospace; font-weight: 900;">@Contract.Customer?.NationalIdOrPassport</span></span>
+                                </div>
+                                <div style="display: flex; align-items: baseline; gap: 4px; font-size: 0.68rem; margin-top: 3px;">
+                                    <strong style="white-space: nowrap;">التوقيع:</strong>
+                                    <span style="border-bottom: 1.5px dotted #000; flex: 1; height: 16px;"></span>
+                                </div>
+                            </div>
+
+                            <!-- Left Block: Company / Authorized Officer -->
+                            <div style="border: 1px solid #000; border-radius: 3px; padding: 3px 8px; background: #fafafa;">
+                                <div style="font-weight: 900; font-size: 0.72rem; margin-bottom: 2px; display: flex; justify-content: space-between; border-bottom: 1px dashed #94a3b8; padding-bottom: 1px;">
+                                    <span>🏢 توقيع وخاتم الشركة (Company Stamp)</span>
+                                    <span style="font-size: 0.62rem; color: #475569; font-weight: 700;">@(ActiveCompanyBrandAr)</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.68rem; margin-bottom: 1px;">
+                                    <span><strong>المسؤول:</strong> @(string.IsNullOrEmpty(Contract.CreatedByStaffName) ? "الإدارة" : Contract.CreatedByStaffName)</span>
+                                    <span><strong>التاريخ:</strong> <span style="font-family: monospace; font-weight: 800;">@Contract.StartDateTime.ToString("yyyy/MM/dd")</span></span>
+                                </div>
+                                <div style="display: flex; align-items: baseline; gap: 4px; font-size: 0.68rem; margin-top: 3px;">
+                                    <strong style="white-space: nowrap;">الختم والتوقيع:</strong>
+                                    <span style="border-bottom: 1.5px dotted #000; flex: 1; height: 16px;"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            }
+
+            @if (_currentDoc == "contract_both")
+            {
+                <!-- Divider for screen preview only (hidden in print) -->
+                <div class="no-print" style="margin: 18px auto; text-align: center; font-weight: 800; color: #1e3a8a; background: #dbeafe; border: 1.5px dashed #3b82f6; border-radius: 6px; padding: 8px 16px; max-width: 820px; font-size: 0.88rem;">
+                    📑 صفحة 2: قفا العقد (شروط اتفاقية التأجير المعتمدة - Terms & Conditions) — ستطبع على ظهر نفس الورقة (وجه وقفا)
+                </div>
+            }
+
+            @if (_currentDoc == "contract_back" || _currentDoc == "contract_both")
+            {
+                <!-- ==================== PAGE 2: OFFICIAL CONTRACT BACK (شروط اتفاقية التأجير الرسمية) ==================== -->
+                <div class="printable-document contract-a4-sheet @(_currentDoc == "contract_both" ? "contract-both-back" : "")" id="printableContractBack" style="background: #ffffff; color: #000000; border: 2px solid #000000; border-radius: 6px; padding: 4mm 6mm; font-family: 'Cairo', 'Tajawal', sans-serif;">
+                    
+                    <!-- 1. English Terms of Rent (Upper Section) -->
+                    <div style="direction: ltr; text-align: left; font-size: 0.61rem; line-height: 1.26; padding-bottom: 4px;">
+                        <div style="font-size: 0.88rem; font-weight: 900; text-align: center; margin-bottom: 3px; letter-spacing: 1.5px;">
+                            TERMS OF RENT
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                            <div><strong>1-</strong> Drivers must be between 22- 75 years of age. They must have a clean driving licence which has been intheir prossession for least two year.</div>
+                            <div><strong>2-</strong> Only those persons apprved and endorsed by @(ActiveCompanyBrandEn) Co. in the rental agreement are allowed to Drive the car.</div>
+                            <div><strong>3-</strong> One rental day is 24 hours and each aditional hours will be calculated at 20 % of the dally rate.</div>
+                            <div><strong>4-</strong> If the rental agreement is covered by the ( American Express ). The American Express Card . Holder is entitled to privileges of the American Express rules which cover all the damage process.</div>
+                            <div><strong>5-</strong> All underbody and tyre damage in renters sole responsibilty and in not coverd by any insurance on a continuation of a rental, signature on first R.A. Indivates agreement to all continuos subsequent R.A. Renter shall in any evernt pay the first amount or any damage up to 2500$ he has purchased conllision damage waver ( CDW ) .</div>
+                            <div><strong>6-</strong> Rental fees include maintProject, oil and insurance against public liability. If an accident occurs the customer is entitled to pay 2500$ as an accident fee to @(ActiveCompanyBrandEn) Rent car co.</div>
+                            <div><strong>7-</strong> Gasouline is not included in the rate.</div>
+                            <div><strong>8-</strong> Use unleaded gasoline.</div>
+                            <div><strong>9-</strong> Rates and terms are subject to change with out notice.</div>
+                            <div><strong>10-</strong> Please return to rental agreement for further details.</div>
+                        </div>
+                        <div style="font-weight: 900; text-align: center; margin-top: 3px; font-size: 0.72rem; letter-spacing: 0.5px;">
+                            Thank you for co-operation
+                        </div>
+                    </div>
+
+                    <!-- 2. Arabic Terms of Rent (Lower Section) -->
+                    <div style="direction: rtl; text-align: justify; font-size: 0.59rem; line-height: 1.28; border-top: 2px solid #000000; padding-top: 4px;">
+                        <div style="font-size: 0.94rem; font-weight: 900; text-align: center; margin-bottom: 3px;">
+                            شروط إتفاقية التأجير
+                        </div>
+                        
+                        <p style="margin-bottom: 3px; font-weight: 700; text-indent: 10px;">
+                            شركة @(ActiveCompanyBrandAr) لتأجير السيارات السياحية المساهمة الخصوصية المحدودة تؤجر بهذا للمستأجر و/أو للسائق الذي يظهر اسمه وتوقيعه في الإتفاقية معا وعلى انفراد ، والمستأجر يستأجر بهذا من الشركة السيارة التابعة للشركة والموصوفة حسب الموافقة لكل الشروط والتعليمات والتصاريح التي في هذا الاتفاق وبكل الوثائق الاضافية التي وقعت من قبل المستأجر ويعلن بهذا ويصادق ويلتزم ويتعهد بمايلي :
+                        </p>
+
+                        <div style="display: flex; flex-direction: column; gap: 1px;">
+                            <div>❖ ان لا يقل عمر السائق عن ( 22 ) سنة ولا يزيد عن ( 75 ) سنة وان تكون بحوزته رخصة قيادة سارية المفعول لا يقل تاريخ اصدارها عن 12 شهر</div>
+                            <div>❖ ان الاشخاص الموافق عليهم والمذكورين في اتفاقية تاجير السيارات مع شركة @(ActiveCompanyBrandAr) هم المسموح لهم فقط بقيادة السيارة الا بإذن خاص من الشركة</div>
+                            <div>❖ ان مدة التاجير اليومي 24 ساعه وكل ساعه اضافية تحسب بواقع 20 ٪ من اليومية</div>
+                            <div>❖ يحق للشركة سحب السياره بأي مخالفه قانونية او عدم الالتزام بالدفع او عند سياقة السياره من شخص اخر اسمه ليس بالعقد.</div>
+                            <div>❖ في حال وقوع حادث او اي نقص في السياره يدفع المستأجر هبوط قيمة السياره حسب تخمين مخمن معتمد</div>
+                            <div>❖ تكون عطل السياره في حال وقوع حادث على المستأجر ويتحمل مسؤولية السياره الى حين وصول السياره الى مقر الشركه ، وتكون الاجره مضاعفة .</div>
+                            <div>❖ يلتزم المستأجر بقيادة السيارة على الطرق المعبدة فقط ، ان التأمين لا يغطي الاضرار التي تلحق بالسيارة جراء قيادتها على طريق غير معبدة ويتحمل المستأجر تكاليف الأضرار الناتجة عن ذلك ، سواء كانت في الاطار او في ارضية السيارة .</div>
+                            <div>❖ ان رسوم التاجير تشمل الصيانة والزيت والتامين ضد الالتزام العام على ان يكون هنالك تأمين صامد بقيمة 2500 دولار امريكي ما يعادل 10000 شيكل في حالة تعرض السيارة لحادث</div>
+                            <div>❖ ان الرسوم لا تشمل قيمة البنزين .</div>
+                            <div>❖ الشركة غير مسؤولة عن الاصابات او الوفيات ويكون التعويض في شركة التامين فقط حسب قانون التعويض الفلسطيني الجديد</div>
+                            <div>❖ ان الرسوم والشروط قابلة للتغيير دون اشعار</div>
+                            <div>❖ الرجاء مراجعة اتفاقية التأجير للاطلاع على تفصيلات اخرى</div>
+                            <div>❖ يأخذ المستأجر السياره كما هو مبين اعلاه وبها كل ادواتها ووثائقها وهي في وضع صالح ويلتزم بأن يرجع السيارة بنفس الوضع الجيد والصالح وفي نفس المكان الذي استأجر به السيارة ( او في المكان الذي تم الاتفاق عليه ) وفي الزمن المحدد وانا احمل المستأجر بالتزاماته حسب هذا الاتفاق يحق للشركة ان ترجع السيارة لنفسها على حساب المستأجر</div>
+                            <div>❖ يدفع المستأجر ضمان مالي بقيمة ( 2500 $ ) او مايعادلها بالعملات الاخرى ( اعفاء التأمين ) او حسب ما هو محدد بالشيك و/او الكمبيالة وتسترد للمستأجر بعد ارجاع السيارة بحالة سليمة مستوفية الشروط ، وفي حال حدوث حادث " لا سمح الله " يصادر مبلغ الضمان والبالغ ( 2500 $ ) ولكن اذا كانت الاضرار اقل من مبلغ الضمان المذكور فيتم خصم المبلغ حسب تقييم الاضرار وباقي المبلغ يسترد للمستأجر وفي حالة الشطب والسرقة يدفع المستأجر ( 2500 $ ) امريكي اخرى اضافية فوق مبلغ الضمان اي يصبح اعفاء التامين ( 2500 $ ) وهذا في حالة الشطب او السرقة .</div>
+                        </div>
+
+                        <!-- Sub-points A to D -->
+                        <div style="margin-top: 3px; padding: 2px 4px; background: #fafafa; border: 1px dashed #000000; font-size: 0.57rem; line-height: 1.24;">
+                            <div><strong>أ -</strong> يلتزم المستأجر في حالة خلل في السيارة حتى لو كان خلل بسيط يجب عليه اخبار الشركة فورا وعدم العبث بها او لغرض التصليح الا باذن مسبق من الشركة</div>
+                            <div><strong>ب -</strong> يلتزم المستأجر بقيادة السيارة على الطرق المحددة فقط وفي حالة حدوث ضرر بأرضية السيارة او بإطارات السيارة يكون المستأجر مسؤول عن تعويض الشركة نتيجة الأضرار التي قام بها</div>
+                            <div><strong>ت -</strong> في حالة التاخر عن موعد تسليم السيارة يتحمل المستأجر كافة المسؤوليات القانونية المترتبة على ذلك</div>
+                            <div><strong>ث -</strong> يلتزم المستأجر في حالة حدوث حادث حتى لو كان صغير باخبار الشركة فورا بشان الحادث لإعطاء تفصيلات كاملة عن ظروف الحادث وفي حالة اصابة انسان في الحادثة يجب اخبار الشرطة حالا ، واخذ اسماء وعناوين الاطراف المشاركة بالحادث وكذلك شهود الحادث واخذ ارقام السيارات المشتركة بالحادث وتفاصيل التامين للسيارات ، وعدم ترك السيارة بدون حراسة واعلام الشركة حالا بكل دعوة قضائية .</div>
+                            <div><strong>ج -</strong> يلتزم المستأجر في حالة حدوث حادث " لا سمح الله " بان يكون مسؤولا باحضار السيارة من مكان وقوع الحادث الة مقر الشركة</div>
+                            <div><strong>ح -</strong> يلتزم المستأجر في حالة حدوث حادث " لا سمح الله " عن عطل السيارة اثناء وجودها في الكراج فترة التصليح</div>
+                            <div><strong>خ -</strong> الشركة ليست مسؤولة عن ضرر او فقدان او ضياع شيء من المستأجر</div>
+                            <div><strong>د -</strong> يلتزم المستأجر بأن لا يعمل او يقود السيارة لنقل مسافرين او لدفع او جراي شيء كان نوعه او للمسابقات الملائمة للسرعة او بشكل مخالف لاي قانون او اهداف غير قانونية</div>
+                        </div>
+
+                        <div style="text-align: center; font-weight: 900; margin-top: 8px; font-size: 0.90rem; letter-spacing: 1px; border-top: 1.5px solid #000000; padding-top: 6px;">
+                            ❖ مع أطيب التمنيات برحلتكم بالسلامة ❖
+                        </div>
+                    </div>
+
+                </div>
+            }
+
+            @if (_currentDoc == "note")
+            {
+                <!-- ==================== OFFICIAL PROMISSORY NOTE & AUTHORIZATION (كمبيالة + إقرار وتفويض) ==================== -->
+                <div class="printable-document official-promissory-sheet" id="printablePromissoryNote" style="max-width: 820px; margin: 0 auto; background: #ffffff; color: #000000; border: 3px double #000000; border-radius: 6px; padding: 24px 30px; font-family: 'Cairo', sans-serif;">
+                    
+                    <!-- Decorative Heading -->
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <h1 style="font-size: 1.8rem; font-weight: 900; letter-spacing: 4px; margin: 0; color: #000000;">
+                            ❖❖❖ كـمـبـيـالـة ❖❖❖
+                        </h1>
+                        <div style="font-size: 0.8rem; color: #334155; margin-top: 2px;">
+                            (مستند تنفيذي ملزم ونافذ قانوناً وقضاءً - رقم العقد: @Contract.ContractNumber)
+                        </div>
+                    </div>
+
+                    <!-- Promissory Note Body (Exact Verbatim from Photo 3) -->
+                    <div style="font-size: 0.95rem; line-height: 2.1; text-align: justify; margin-bottom: 25px;">
+                        
+                        <div>
+                            <strong>أتعهد بموجب هذه الكمبيالة بدفع المبلغ :</strong> 
+                            <span style="font-family: monospace; font-weight: 900; font-size: 1.15rem; border-bottom: 1.5px solid #000; padding: 0 10px;">
+                                @Contract.PromissoryNoteAmount.ToString("N0") ₪
+                            </span>
+                            <span style="font-weight: 800; border-bottom: 1.5px solid #000; padding: 0 10px;">
+                                (@ArabicNumberHelper.ToArabicWords(Contract.PromissoryNoteAmount, "شيكل جديد"))
+                            </span>
+                        </div>
+
+                        <div>
+                            <strong>أنا الموقع أدناه :</strong> 
+                            <span style="font-weight: 900; border-bottom: 1.5px solid #000; padding: 0 10px;">@Contract.Customer?.FullName</span>
+                            <strong>من سكان :</strong> 
+                            <span style="font-weight: 700; border-bottom: 1.5px solid #000; padding: 0 10px;">@(string.IsNullOrEmpty(Contract.Customer?.Address) ? "طوباس" : Contract.Customer?.Address)</span>
+                            <strong>حامل هوية رقم :</strong> 
+                            <span style="font-weight: 900; font-family: monospace; border-bottom: 1.5px solid #000; padding: 0 10px;">@Contract.Customer?.NationalIdOrPassport</span>
+                        </div>
+
+                        <div>
+                            <strong>وقيمة هذه الكمبيالة وصلتني نقداً .</strong>
+                        </div>
+
+                        <div>
+                            <strong>للسيد :</strong> 
+                            <span style="font-weight: 900; border-bottom: 1.5px solid #000; padding: 0 10px;">@ActiveCompanyNameAr</span>
+                            <strong>حامل هوية / مشغل رقم :</strong> 
+                            <span style="font-weight: 900; font-family: monospace; border-bottom: 1.5px solid #000; padding: 0 10px;">@ActiveCompanyDealerNo</span>
+                        </div>
+
+                        <div>
+                            <strong>بتاريخ :</strong> 
+                            <span style="font-weight: 800; font-family: monospace; border-bottom: 1.5px solid #000; padding: 0 10px;">@Contract.StartDateTime.ToString("yyyy/MM/dd")</span>
+                        </div>
+
+                        <div>
+                            <strong>بالمصروف :</strong> 
+                            <span style="font-weight: 800; border-bottom: 1.5px solid #000; padding: 0 10px;">@Contract.PromissoryNoteAmount.ToString("N0") شيكل جديد</span>
+                        </div>
+
+                        <div>
+                            <strong>وسأقوم بدفع المبلغ المرقوم أعلاه .</strong>
+                        </div>
+
+                        <div style="margin-top: 6px; text-indent: 15px;">
+                            وإنني أقر وأعترف بأن الكمبيالة بمثابة حكم مبرم وقطعي ووكالة صادر عن المحكمة المتخصصة وإنني أسقط حقي بالطعن بها أو بمحتواها ومضمونها لدى أي مرجع رسمي أو دوائر التنفيذ المتخصصة ويحق للدائن تنفيذها ولا تحتاج الى تفسير . وإنني أسقطت حقي بالإدعاء ببطلانها لأي سبب كان ولا يحق لي طلب تقسيطها أبداً .
+                        </div>
+
+                        <div>
+                            وإن توقيعي أدناه هو إقرار بما ورد أعلاه ... حررت هذه الكمبيالة بتاريخ : 
+                            <span style="font-weight: 800; font-family: monospace; border-bottom: 1.5px solid #000; padding: 0 10px;">@Contract.StartDateTime.ToString("yyyy/MM/dd")</span>
+                        </div>
+                    </div>
+
+                    <!-- Signatures (Debtor, Guarantor, Witness) -->
+                    <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 15px; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px dashed #000;">
+                        <div>
+                            <div style="font-weight: 900; font-size: 0.9rem; margin-bottom: 35px;">توقيع المدين المتعهد:</div>
+                            <div style="border-top: 1px solid #000; padding-top: 2px; font-size: 0.82rem;">الاسم: @Contract.Customer?.FullName</div>
+                        </div>
+                        <div>
+                            <div style="font-weight: 900; font-size: 0.9rem; margin-bottom: 35px;">كفيل:</div>
+                            <div style="border-top: 1px solid #000; padding-top: 2px; font-size: 0.82rem;">الاسم والتوقيع: ............................</div>
+                        </div>
+                        <div>
+                            <div style="font-weight: 900; font-size: 0.9rem; margin-bottom: 35px;">شاهد:</div>
+                            <div style="border-top: 1px solid #000; padding-top: 2px; font-size: 0.82rem;">الاسم والتوقيع: ............................</div>
+                        </div>
+                    </div>
+
+                    <!-- Section: Authorization (إقرار وتفويض) -->
+                    <div style="margin-top: 10px;">
+                        <div style="text-align: center; margin-bottom: 12px;">
+                            <h2 style="font-size: 1.3rem; font-weight: 900; letter-spacing: 2px; margin: 0;">
+                                ❖❖❖ إقرار وتفويض ❖❖❖
+                            </h2>
+                        </div>
+
+                        <div style="font-size: 0.92rem; line-height: 2; text-align: justify;">
+                            <div>
+                                <strong>أنا الموقع أدناه:</strong> 
+                                <span style="font-weight: 900; border-bottom: 1.5px solid #000; padding: 0 10px;">@Contract.Customer?.FullName</span>
+                                <strong>من :</strong> 
+                                <span style="font-weight: 700; border-bottom: 1.5px solid #000; padding: 0 10px;">@(string.IsNullOrEmpty(Contract.Customer?.Address) ? "طوباس" : Contract.Customer?.Address)</span>
+                                <strong>حامل هوية رقم:</strong> 
+                                <span style="font-weight: 900; font-family: monospace; border-bottom: 1.5px solid #000; padding: 0 10px;">@Contract.Customer?.NationalIdOrPassport</span>
+                            </div>
+
+                            <div style="margin-top: 4px;">
+                                أقر وأنا بكامل الصفات المعتبرة شرعاً وقانوناً بأنني أفوض الدائن بتعبئة أي بيانات غير واردة في الكمبيالة أعلاه .
+                            </div>
+
+                            <div style="margin-top: 20px; display: flex; justify-content: flex-end; align-items: center; gap: 15px;">
+                                <span style="font-weight: 900; font-size: 1rem;">المقر :</span>
+                                <span style="border-bottom: 1px solid #000; width: 250px; height: 20px; display: inline-block;"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            }
+
+            @if (_currentDoc == "inspection")
+            {
+                <!-- ==================== VEHICLE INSPECTION SHEET ==================== -->
+                <div class="printable-document official-inspection-sheet" id="printableInspectionSheet" style="max-width: 820px; margin: 0 auto; background: #ffffff; color: #000000; border: 2px solid #000000; border-radius: 4px; padding: 16px 20px; font-family: 'Cairo', sans-serif;">
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 14px;">
+                        <div>
+                            <h2 style="font-size: 1.25rem; font-weight: 900; margin: 0;">@ActiveCompanyNameAr</h2>
+                            <p style="font-size: 0.8rem; color: #334155; margin-top: 2px;">محضر استلام وفحص حالة المركبة الفنية والظاهرية (Vehicle Inspection Sheet)</p>
+                        </div>
+                        <div style="text-align: left; font-size: 0.8rem;">
+                            <div><strong>رقم العقد:</strong> <span style="font-family: monospace; font-weight: bold;">@Contract.ContractNumber</span></div>
+                            <div><strong>المركبة:</strong> @Contract.Vehicle?.Brand @Contract.Vehicle?.Model (@Contract.Vehicle?.PlateNumber)</div>
+                            <div><strong>المستأجر:</strong> @Contract.Customer?.FullName</div>
+                        </div>
+                    </div>
+
+                    <div style="border: 1px solid #000; border-radius: 4px; padding: 8px 12px; margin-bottom: 12px; background: #fafafa; font-size: 0.82rem;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                            <div><strong>عداد البداية:</strong> @Contract.StartOdometer.ToString("N0") كم</div>
+                            <div><strong>عداد الإرجاع:</strong> @(Contract.EndOdometer.HasValue ? $"{Contract.EndOdometer.Value:N0} كم" : "قيد الاستخدام")</div>
+                            <div><strong>مستوى الوقود:</strong> @(Contract.FuelLevelStart == FuelLevel.Full ? "ممتلئ بالكامل (Full)" : "3/4 خزان")</div>
+                        </div>
+                    </div>
+
+                    <div style="border: 1px solid #000; border-radius: 4px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.8rem;">
+                        <div style="font-weight: 800; margin-bottom: 6px;">قائمة ملحقات وتجهيزات السيارة المسلمة:</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                            <div>[ ✓ ] الإطار الاحتياطي (Spare Tire)</div>
+                            <div>[ ✓ ] رافعة المركبة (Jack)</div>
+                            <div>[ ✓ ] مفتاح العجلات (Wheel Wrench)</div>
+                            <div>[ ✓ ] طفاية الحريق (Fire Extinguisher)</div>
+                            <div>[ ✓ ] حقيبة الإسعافات (First Aid Kit)</div>
+                            <div>[ ✓ ] مثلث التحذير (Warning Triangle)</div>
+                            <div>[ ✓ ] نظافة الهيكل الخارجي</div>
+                            <div>[ ✓ ] نظافة المقصورة والفرش</div>
+                            <div>[ ✓ ] رخصة ورقة التأمين الأصلية</div>
+                        </div>
+                    </div>
+
+                    <!-- Inspection Diagram in Sheet with Marks Overlay -->
+                    <div style="border: 1px solid #000; border-radius: 4px; padding: 6px; text-align: center; margin-bottom: 14px;">
+                        <div style="font-size: 0.75rem; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; padding: 0 8px;">
+                            <span>مخطط هيكل السيارة لتحديد الخدوش والصدمات (شامل كافة الزوايا):</span>
+                            <span>Vehicle Damage Blueprint (All 5 Angles)</span>
+                        </div>
+                        
+                        <div style="text-align: center; width: 100%; line-height: 0; background: #ffffff; padding: 2px 0;">
+                            <div style="position: relative; display: inline-block; height: 68mm; width: calc(68mm * 1590 / 696); max-width: 100%; line-height: 0; margin: 0 auto;">
+                                <img src="images/inspection/car_all_clean.png" 
+                                     alt="Vehicle Blueprint" 
+                                     style="display: block; width: 100%; height: 100%; margin: 0; padding: 0;" />
+
+                                <!-- Angle Indicator Labels on Blueprint -->
+                                <div style="position: absolute; top: 2%; left: 1%; background: rgba(0,0,0,0.72); color: #fff; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 3px; line-height: 1.1; pointer-events: none;">🚘 أمامي</div>
+                                <div style="position: absolute; top: 2%; left: 45%; transform: translateX(-50%); background: rgba(0,0,0,0.72); color: #fff; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 3px; line-height: 1.1; pointer-events: none;">🚙 جانبي</div>
+                                <div style="position: absolute; top: 2%; right: 1%; background: rgba(0,0,0,0.72); color: #fff; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 3px; line-height: 1.1; pointer-events: none;">🚗 خلفي</div>
+                                <div style="position: absolute; bottom: 2%; left: 1%; background: rgba(0,0,0,0.72); color: #fff; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 3px; line-height: 1.1; pointer-events: none;">🏎️ أمامي مجسم</div>
+                                <div style="position: absolute; bottom: 2%; right: 1%; background: rgba(0,0,0,0.72); color: #fff; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 3px; line-height: 1.1; pointer-events: none;">🏎️ خلفي مجسم</div>
+
+                                @for (int i = 0; i < _vehicleDamageMarks.Count; i++)
+                                {
+                                    var mark = _vehicleDamageMarks[i];
+                                    var coords = GetUniversalMarkCoordinates(mark);
+                                    var idx = i + 1;
+                                    <div style="position: absolute; left: @(coords.X.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%; top: @(coords.Y.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%; transform: translate(-50%, -50%); z-index: 10; pointer-events: none;">
+                                        <div style="width: 22px; height: 22px; border-radius: 50%; background: #dc2626; color: #ffffff; border: 2px solid #ffffff; box-shadow: 0 0 3px #000; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; font-family: monospace;">
+                                            @idx
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        @if (_vehicleDamageMarks.Count > 0)
+                        {
+                            <div style="border-top: 1.5px solid #000000; margin-top: 4px; padding: 4px 8px; text-align: right; background: #fff5f5; font-size: 0.72rem;">
+                                <div style="font-weight: 900; color: #b91c1c; margin-bottom: 2px;">
+                                    ⚠️ بيان الأضرار والخدوش المسجلة مسبقاً:
+                                </div>
+                                <div style="display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 0.7rem;">
+                                    @for (int i = 0; i < _vehicleDamageMarks.Count; i++)
+                                    {
+                                        var mark = _vehicleDamageMarks[i];
+                                        <div style="display: inline-flex; align-items: center; gap: 5px; background: #ffffff; border: 1.5px solid #dc2626; border-radius: 4px; padding: 2px 8px;">
+                                            <span style="background: #dc2626; color: #ffffff; border-radius: 50%; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900;">@(i + 1)</span>
+                                            <strong style="color: #991b1b;">@mark.DamageType:</strong>
+                                            <span style="color: #1e293b; font-weight: 600;">@(string.IsNullOrWhiteSpace(mark.Description) ? "بدون وصف إضافي" : mark.Description)</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; padding-top: 15px; border-top: 1.5px solid #000;">
+                        <div style="text-align: center; width: 220px;">
+                            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 40px;">توقيع المستأجر بالاستلام:</div>
+                            <div style="border-top: 1px dashed #000; padding-top: 2px; font-size: 0.8rem;">@Contract.Customer?.FullName</div>
+                        </div>
+                        <div style="text-align: center; width: 220px;">
+                            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 40px;">توقيع موظف الفحص والتسليم:</div>
+                            <div style="border-top: 1px dashed #000; padding-top: 2px; font-size: 0.8rem;">اعتماد المعاينة</div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (_currentDoc == "receipt" || _currentDoc == "payment")
+            {
+                <!-- Non-Printable Quick Toolbar to Adjust Amount or Notes -->
+                <div class="no-print" style="max-width: 820px; margin: 0 auto 15px auto; background: #ffffff; border: 1.5px solid var(--border-color); border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-weight: 800; font-size: 0.88rem; color: #0f172a;">
+                            @(_currentDoc == "receipt" ? "📥 إعدادات سند القبض:" : "💸 إعدادات سند الصرف:")
+                        </span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label style="font-size: 0.82rem; font-weight: 700; color: #334155;">المبلغ (₪):</label>
+                            <input type="number" class="form-control" style="width: 110px; font-weight: 900; font-size: 1rem; color: @(_currentDoc == "receipt" ? "#15803d" : "#dc2626"); text-align: center;" @bind="_voucherAmount" />
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label style="font-size: 0.82rem; font-weight: 700; color: #334155;">البيان المخصص:</label>
+                            <input type="text" class="form-control" style="width: 260px; font-size: 0.82rem;" @bind="_voucherNotes" placeholder="بيان تفصيلي للسند..." />
+                        </div>
+                        <button type="button" class="filter-pill" style="font-size: 0.78rem; cursor: pointer;" @onclick='() => SelectDocument(_currentDoc)'>
+                            🔄 استعادة الافتراضي
+                        </button>
+                    </div>
+                </div>
+            }
+
+            @if (_currentDoc == "receipt")
+            {
+                <!-- ==================== OFFICIAL RECEIPT VOUCHER (سند قبض مالي معتمد) ==================== -->
+                <div class="printable-document official-voucher-sheet" id="printableReceiptVoucher" dir="rtl" style="direction: rtl; text-align: right; max-width: 800px; margin: 0 auto; background: #ffffff; color: #000000; border: 2px solid #000000; border-radius: 6px; padding: 20px 24px; font-family: 'Cairo', 'Tajawal', sans-serif;">
+                    
+                    <!-- Header with Dual Company Branding -->
+                    <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-bottom: 2px solid #000000; padding-bottom: 10px; margin-bottom: 14px;">
+                        <div style="text-align: right; line-height: 1.3;">
+                            <h2 style="font-size: 1.25rem; font-weight: 900; margin: 0; color: #000000;">@ActiveCompanyNameAr</h2>
+                            <div style="font-size: 0.8rem; font-weight: 700; color: #1e293b;">@ActiveCompanySubtitleAr</div>
+                            <div style="font-size: 0.76rem;">@ActiveCompanyAddressAr</div>
+                            <div style="font-size: 0.76rem; font-weight: bold;">مشتغل مرخص رقم: @ActiveCompanyDealerNo</div>
+                            <div style="font-size: 0.76rem; font-family: monospace;">هاتف: @ActiveCompanyPhones</div>
+                        </div>
+
+                        <div style="text-align: center; padding: 0 10px;">
+                            @if (_selectedCompany == "altaj")
+                            {
+                                <img src="images/logo.png" alt="TAJ" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 3px;" />
+                            }
+                            else
+                            {
+                                <svg width="36" height="28" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="display: block; margin: 0 auto 2px;">
+                                    <path d="M2 19h20v2H2v-2zm1.2-14L7 9.8 12 4l5 5.8 3.8-4.8.9 11.2H2.3L3.2 5z"/>
+                                </svg>
+                            }
+                            <div style="border: 2px solid #000000; padding: 3px 18px; border-radius: 6px; font-weight: 900; font-size: 1.15rem; background: #ffffff; color: #000000; display: inline-block;">
+                                ســنـد قـبــض مــالـي
+                            </div>
+                            <span style="font-size: 0.7rem; color: #475569; display: block; margin-top: 2px;">
+                                OFFICIAL RECEIPT VOUCHER
+                            </span>
+                        </div>
+
+                        <div style="text-align: left; font-size: 0.8rem; line-height: 1.45;">
+                            <div><strong>رقم السند:</strong> <span style="font-family: monospace; font-weight: 900; font-size: 1.05rem;">REC-@Contract.ContractNumber</span></div>
+                            <div><strong>رقم العقد:</strong> <span style="font-family: monospace; font-weight: bold;">@Contract.ContractNumber</span></div>
+                            <div><strong>التاريخ:</strong> <span style="font-family: monospace; font-weight: bold;">@Contract.StartDateTime.ToString("yyyy/MM/dd")</span></div>
+                            <div><strong>الوقت:</strong> <span style="font-family: monospace; font-weight: bold;">@Contract.StartDateTime.ToString("hh:mm tt")</span></div>
+                        </div>
+                    </div>
+
+                    @{
+                        var rAmount = _voucherAmount > 0 ? _voucherAmount : Contract.PaidAmount;
+                    }
+
+                    <!-- Amount Ribbon with Tafqeet -->
+                    <div style="background: #fafafa; border: 1.5px solid #000000; border-radius: 6px; padding: 8px 14px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 5px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-weight: 800; font-size: 0.92rem;">المبلغ المقبوض بالأرقام:</span>
+                                <span style="font-size: 1.35rem; font-weight: 900; color: #000000; font-family: monospace; background: #ffffff; padding: 2px 14px; border-radius: 4px; border: 1.5px solid #000000;">
+                                    @rAmount.ToString("N0") ₪
+                                </span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-weight: 800; font-size: 0.85rem;">طريقة الدفع:</span>
+                                <span style="font-weight: 900; border: 1.5px solid #000000; padding: 2px 10px; border-radius: 4px; background: #ffffff; font-size: 0.85rem;">
+                                    @(Contract.PaymentMode switch {
+                                        PaymentMode.ImmediateCash => "نقداً (Cash)",
+                                        PaymentMode.CreditCard => "بطاقة ائتمان / فيزا",
+                                        PaymentMode.BankTransfer => "تحويل بنكي",
+                                        _ => "نقداً"
+                                    })
+                                </span>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; border-top: 1px dashed #cbd5e1; padding-top: 5px; margin-top: 2px;">
+                            <span style="font-weight: 800; font-size: 0.88rem;">المبلغ بالحروف:</span>
+                            <span style="font-weight: 900; color: #000000; font-size: 0.94rem;">
+                                فقط @(ArabicNumberHelper.ToArabicWords(rAmount)) لا غير.
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Main Body Details -->
+                    <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; font-size: 0.9rem;">
+                        <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px;">
+                            <span style="font-weight: 900; width: 155px; flex-shrink: 0;">وصلنا من السيد / السادة:</span>
+                            <span style="font-weight: 900; font-size: 1rem; color: #000000;">@(Contract.Customer?.FullName ?? "العميل المحترم")</span>
+                            @if (!string.IsNullOrEmpty(Contract.Customer?.NationalIdOrPassport))
+                            {
+                                <span style="margin-right: 15px; color: #334155; font-size: 0.85rem;">(هوية/جواز: <span style="font-family: monospace; font-weight: bold;">@Contract.Customer.NationalIdOrPassport</span>)</span>
+                            }
+                            @if (!string.IsNullOrEmpty(Contract.Customer?.PrimaryPhone))
+                            {
+                                <span style="margin-right: 15px; color: #334155; font-size: 0.85rem;">(هاتف: <span style="font-family: monospace;">@Contract.Customer.PrimaryPhone</span>)</span>
+                            }
+                        </div>
+
+                        <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px;">
+                            <span style="font-weight: 900; width: 155px; flex-shrink: 0;">وذلك لقاء / البيان:</span>
+                            <span style="font-weight: bold; flex: 1;">
+                                @(!string.IsNullOrWhiteSpace(_voucherNotes) ? _voucherNotes : $"دفعة مالية معتمدة لتأجير مركبة سياحية بموجب العقد رقم ({Contract.ContractNumber})")
+                            </span>
+                        </div>
+
+                        <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px; font-size: 0.85rem;">
+                            <span style="font-weight: 900; width: 155px; flex-shrink: 0;">بيانات المركبة المؤجرة:</span>
+                            <span>
+                                <strong>@Contract.Vehicle?.Brand @Contract.Vehicle?.Model (@Contract.Vehicle?.ModelYear)</strong> | 
+                                رقم اللوحة: <strong style="font-family: monospace; font-size: 0.95rem;">@Contract.Vehicle?.PlateNumber</strong> | 
+                                اللون: <strong>@Contract.Vehicle?.Color</strong>
+                            </span>
+                        </div>
+
+                        <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px; font-size: 0.85rem;">
+                            <span style="font-weight: 900; width: 155px; flex-shrink: 0;">فترة التأجير المعتمدة:</span>
+                            <span>
+                                من: <strong style="font-family: monospace;">@Contract.StartDateTime.ToString("yyyy/MM/dd hh:mm tt")</strong> | 
+                                إلى: <strong style="font-family: monospace;">@(Contract.IsOpenEnded ? "عقد مفتوح (حساب يومي)" : Contract.ExpectedReturnDateTime.ToString("yyyy/MM/dd hh:mm tt"))</strong> | 
+                                المدة: <strong>@(Contract.IsOpenEnded ? $"{Contract.OpenRentalDays} يوم حتى الآن" : $"{GetRentalDurationDays()} يوم")</strong>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Financial Summary Breakdown Table -->
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; text-align: center; font-size: 0.85rem; border: 1.5px solid #000000;">
+                        <thead>
+                            <tr style="background: #f1f5f9; font-weight: 800; border-bottom: 1.5px solid #000000;">
+                                <th style="padding: 6px; border: 1px solid #000000;">إجمالي العقد</th>
+                                @if (Contract.DiscountAmount > 0)
+                                {
+                                    <th style="padding: 6px; border: 1px solid #000000; background: #fff1f2; color: #b91c1c;">الخصم الممنوح</th>
+                                    <th style="padding: 6px; border: 1px solid #000000;">الصافي بعد الخصم</th>
+                                }
+                                <th style="padding: 6px; border: 1px solid #000000; background: #e0f2fe;">المبلغ المقبوض بهذا السند</th>
+                                <th style="padding: 6px; border: 1px solid #000000;">الرصيد المتبقي</th>
+                                <th style="padding: 6px; border: 1px solid #000000;">كمبيالة الضمان</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="font-weight: 800; font-family: monospace; font-size: 0.95rem;">
+                                <td style="padding: 8px; border: 1px solid #000000;">@(Contract.OriginalAgreedAmount > 0 ? Contract.OriginalAgreedAmount.ToString("N0") : Contract.TotalAgreedAmount.ToString("N0")) ₪</td>
+                                @if (Contract.DiscountAmount > 0)
+                                {
+                                    <td style="padding: 8px; border: 1px solid #000000; background: #fff1f2; color: #b91c1c; font-weight: 900;">
+                                        -@Contract.DiscountAmount.ToString("N0") ₪ @(Contract.DiscountType == "Percentage" ? $"({Contract.DiscountValue}%)" : "")
+                                    </td>
+                                    <td style="padding: 8px; border: 1px solid #000000; font-weight: 900; color: #0f172a;">
+                                        @Contract.TotalAgreedAmount.ToString("N0") ₪
+                                    </td>
+                                }
+                                <td style="padding: 8px; border: 1px solid #000000; background: #f0fdf4; color: #166534; font-weight: 900; font-size: 1.1rem;">
+                                    @rAmount.ToString("N0") ₪
+                                </td>
+                                <td style="padding: 8px; border: 1px solid #000000; color: @(Contract.RemainingAmount > 0 ? "#dc2626" : "#166534");">
+                                    @Contract.RemainingAmount.ToString("N0") ₪
+                                </td>
+                                <td style="padding: 8px; border: 1px solid #000000;">
+                                    @(Contract.PromissoryNoteAmount > 0 ? $"{Contract.PromissoryNoteAmount:N0} ₪" : "لا يوجد")
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- Signatures & Company Seal Block -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; text-align: center; border-top: 1.5px solid #000000; padding-top: 12px; margin-top: 10px;">
+                        <div>
+                            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 40px;">توقيع الدافع (المستأجر):</div>
+                            <div style="border-top: 1px dashed #000000; padding-top: 2px; font-weight: 700; font-size: 0.82rem;">@Contract.Customer?.FullName</div>
+                        </div>
+                        <div>
+                            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 40px;">توقيع المستلم (أمين الصندوق):</div>
+                            <div style="border-top: 1px dashed #000000; padding-top: 2px; font-weight: 700; font-size: 0.82rem;">المحاسب المعتمد</div>
+                        </div>
+                        <div>
+                            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 40px;">ختم وتوقيع الشركة:</div>
+                            <div style="border-top: 1px dashed #000000; padding-top: 2px; font-weight: 700; font-size: 0.82rem;">@ActiveCompanyNameAr</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 15px; border-top: 1px dashed #cbd5e1; padding-top: 5px; text-align: center; font-size: 0.7rem; color: #64748b;">
+                        يعتبر هذا السند وثيقة مالية رسمية صادرة عن النظام الإلكتروني لـ @ActiveCompanyNameAr - لا يعتمد أي كشط أو تعديل يدوي
+                    </div>
+                </div>
+            }
+
+            @if (_currentDoc == "payment")
+            {
+                <!-- ==================== OFFICIAL PAYMENT / REFUND VOUCHER (سند صرف مالي معتمد) ==================== -->
+                <div class="printable-document official-voucher-sheet" id="printablePaymentVoucher" dir="rtl" style="direction: rtl; text-align: right; max-width: 800px; margin: 0 auto; background: #ffffff; color: #000000; border: 2px solid #000000; border-radius: 6px; padding: 20px 24px; font-family: 'Cairo', 'Tajawal', sans-serif;">
+                    
+                    <!-- Header with Dual Company Branding -->
+                    <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-bottom: 2px solid #000000; padding-bottom: 10px; margin-bottom: 14px;">
+                        <div style="text-align: right; line-height: 1.3;">
+                            <h2 style="font-size: 1.25rem; font-weight: 900; margin: 0; color: #000000;">@ActiveCompanyNameAr</h2>
+                            <div style="font-size: 0.8rem; font-weight: 700; color: #1e293b;">@ActiveCompanySubtitleAr</div>
+                            <div style="font-size: 0.76rem;">@ActiveCompanyAddressAr</div>
+                            <div style="font-size: 0.76rem; font-weight: bold;">مشتغل مرخص رقم: @ActiveCompanyDealerNo</div>
+                            <div style="font-size: 0.76rem; font-family: monospace;">هاتف: @ActiveCompanyPhones</div>
+                        </div>
+
+                        <div style="text-align: center; padding: 0 10px;">
+                            @if (_selectedCompany == "altaj")
+                            {
+                                <img src="images/logo.png" alt="TAJ" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 3px;" />
+                            }
+                            else
+                            {
+                                <svg width="36" height="28" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="display: block; margin: 0 auto 2px;">
+                                    <path d="M2 19h20v2H2v-2zm1.2-14L7 9.8 12 4l5 5.8 3.8-4.8.9 11.2H2.3L3.2 5z"/>
+                                </svg>
+                            }
+                            <div style="border: 2px solid #000000; padding: 3px 18px; border-radius: 6px; font-weight: 900; font-size: 1.15rem; background: #ffffff; color: #000000; display: inline-block;">
+                                ســنـد صـــرف مــالـي
+                            </div>
+                            <span style="font-size: 0.7rem; color: #475569; display: block; margin-top: 2px;">
+                                OFFICIAL PAYMENT VOUCHER
+                            </span>
+                        </div>
+
+                        <div style="text-align: left; font-size: 0.8rem; line-height: 1.45;">
+                            <div><strong>رقم السند:</strong> <span style="font-family: monospace; font-weight: 900; font-size: 1.05rem;">PAY-@Contract.ContractNumber</span></div>
+                            <div><strong>رقم العقد:</strong> <span style="font-family: monospace; font-weight: bold;">@Contract.ContractNumber</span></div>
+                            <div><strong>التاريخ:</strong> <span style="font-family: monospace; font-weight: bold;">@DateTime.Now.ToString("yyyy/MM/dd")</span></div>
+                            <div><strong>الوقت:</strong> <span style="font-family: monospace; font-weight: bold;">@DateTime.Now.ToString("hh:mm tt")</span></div>
+                        </div>
+                    </div>
+
+                    @{
+                        var payAmount = _voucherAmount > 0 ? _voucherAmount : Contract.PaidAmount;
+                    }
+
+                    <!-- Amount Ribbon with Tafqeet -->
+                    <div style="background: #fafafa; border: 1.5px solid #000000; border-radius: 6px; padding: 8px 14px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 5px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-weight: 800; font-size: 0.92rem;">المبلغ المصروف بالأرقام:</span>
+                                <span style="font-size: 1.35rem; font-weight: 900; color: #000000; font-family: monospace; background: #ffffff; padding: 2px 14px; border-radius: 4px; border: 1.5px solid #000000;">
+                                    @payAmount.ToString("N0") ₪
+                                </span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-weight: 800; font-size: 0.85rem;">طريقة الصرف:</span>
+                                <span style="font-weight: 900; border: 1.5px solid #000000; padding: 2px 10px; border-radius: 4px; background: #ffffff; font-size: 0.85rem;">
+                                    نقداً من الصندوق (Cash)
+                                </span>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; border-top: 1px dashed #cbd5e1; padding-top: 5px; margin-top: 2px;">
+                            <span style="font-weight: 800; font-size: 0.88rem;">المبلغ بالحروف:</span>
+                            <span style="font-weight: 900; color: #000000; font-size: 0.94rem;">
+                                فقط @(ArabicNumberHelper.ToArabicWords(payAmount)) لا غير.
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Main Body Details -->
+                    <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; font-size: 0.9rem;">
+                        <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px;">
+                            <span style="font-weight: 900; width: 155px; flex-shrink: 0;">يُصرف إلى السيد / السادة:</span>
+                            <span style="font-weight: 900; font-size: 1rem; color: #000000;">@(string.IsNullOrWhiteSpace(_voucherRecipient) ? (Contract.Customer?.FullName ?? "العميل المحترم") : _voucherRecipient)</span>
+                            @if (!string.IsNullOrEmpty(Contract.Customer?.NationalIdOrPassport))
+                            {
+                                <span style="margin-right: 15px; color: #334155; font-size: 0.85rem;">(هوية/جواز: <span style="font-family: monospace; font-weight: bold;">@Contract.Customer.NationalIdOrPassport</span>)</span>
+                            }
+                        </div>
+
+                        <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px;">
+                            <span style="font-weight: 900; width: 155px; flex-shrink: 0;">وذلك لقاء / البيان:</span>
+                            <span style="font-weight: bold; flex: 1;">
+                                @(!string.IsNullOrWhiteSpace(_voucherNotes) ? _voucherNotes : $"استرداد أمانة تأمين نقدي / رد باقي رصيد مستحق عن عقد التأجير رقم ({Contract.ContractNumber})")
+                            </span>
+                        </div>
+
+                        <div style="display: flex; border-bottom: 1px dotted #000000; padding-bottom: 4px; font-size: 0.85rem;">
+                            <span style="font-weight: 900; width: 155px; flex-shrink: 0;">المركبة المعنية:</span>
+                            <span>
+                                <strong>@Contract.Vehicle?.Brand @Contract.Vehicle?.Model</strong> (لوحة: <strong style="font-family: monospace;">@Contract.Vehicle?.PlateNumber</strong>)
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Signatures & Authorization -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; text-align: center; border-top: 1.5px solid #000000; padding-top: 15px; margin-top: 25px;">
+                        <div>
+                            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 40px;">توقيع القابض (المستلم باليد):</div>
+                            <div style="border-top: 1px dashed #000000; padding-top: 2px; font-weight: 700; font-size: 0.82rem;">@(Contract.Customer?.FullName ?? "المستلم")</div>
+                        </div>
+                        <div>
+                            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 40px;">توقيع أمين الصندوق / الصارف:</div>
+                            <div style="border-top: 1px dashed #000000; padding-top: 2px; font-weight: 700; font-size: 0.82rem;">المحاسب المعتمد</div>
+                        </div>
+                        <div>
+                            <div style="font-weight: 800; font-size: 0.85rem; margin-bottom: 40px;">اعتماد المدير المالي / العام:</div>
+                            <div style="border-top: 1px dashed #000000; padding-top: 2px; font-weight: 700; font-size: 0.82rem;">إدارة @ActiveCompanyNameAr</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px; border-top: 1px dashed #cbd5e1; padding-top: 5px; text-align: center; font-size: 0.7rem; color: #64748b;">
+                        سند صرف مالي إلكتروني معتمد - صادر عن نظام المحاسبة المركزي لـ @ActiveCompanyNameAr
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- WhatsApp Modal Popup (if opened) -->
+        @if (_showWhatsAppModal)
+        {
+            <div style="background: #f0fdf4; border-top: 2px solid #16a34a; padding: 14px 20px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;" class="no-print">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px; font-weight: 800; color: #166534; font-size: 0.95rem;">
+                        <span>💬 إرسال ملخص العقد عبر واتساب (WhatsApp)</span>
+                    </div>
+                    <button type="button" class="btn-close-modal" style="font-size: 1rem;" @onclick="() => _showWhatsAppModal = false">×</button>
+                </div>
+
+                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 0.85rem; font-weight: bold;">مقدمة الدولة:</span>
+                        <button type="button" 
+                                class="filter-pill @(_whatsAppPrefix == "970" ? "active" : "")" 
+                                style="border: 1.5px solid @(_whatsAppPrefix == "970" ? "#16a34a" : "#cbd5e1"); font-weight: 800; font-size: 0.82rem; cursor: pointer;"
+                                @onclick='() => _whatsAppPrefix = "970"'>
+                            🇵🇸 +970 (فلسطين)
+                        </button>
+                        <button type="button" 
+                                class="filter-pill @(_whatsAppPrefix == "972" ? "active" : "")" 
+                                style="border: 1.5px solid @(_whatsAppPrefix == "972" ? "#16a34a" : "#cbd5e1"); font-weight: 800; font-size: 0.82rem; cursor: pointer;"
+                                @onclick='() => _whatsAppPrefix = "972"'>
+                            🇮🇱 +972 (إسرائيل / الداخل)
+                        </button>
+                    </div>
+
+                    <div style="flex: 1; min-width: 180px;">
+                        <input type="text" class="form-control" @bind="_whatsAppPhone" placeholder="رقم الجوال: 05xxxxxxxx" style="direction: ltr; font-weight: bold;" />
+                    </div>
+
+                    <button type="button" class="filter-pill" style="border: 1.5px solid #16a34a; font-weight: bold; background: #fff; cursor: pointer;" @onclick="CopyContractWhatsApp">
+                        <span>📋 نسخ نص الرسالة</span>
+                    </button>
+
+                    <button type="button" class="btn-primary-action" style="background: #16a34a; border-color: #15803d;" @onclick="SendContractWhatsApp">
+                        <span>🚀 فتح المحادثة والإرسال</span>
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- Modal Footer Actions (Non-Printable) -->
+        <div class="modal-footer no-print" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; flex-shrink: 0;">
+            <div style="display: flex; gap: 8px; align-items: center;">
+                @if (IsPendingConfirmation || CanRollbackNewContract)
+                {
+                    <button type="button" class="btn-back-to-edit" style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important; border: 2px solid #f59e0b !important; color: #ffffff !important; font-weight: 900; font-size: 0.95rem; padding: 8px 18px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(180, 83, 9, 0.35); text-decoration: none;" @onclick="HandleBackToEdit">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5">
+                            <line x1="19" y1="12" x2="5" y2="12"></line>
+                            <polyline points="12 19 5 12 12 5"></polyline>
+                        </svg>
+                        <span style="color: #ffffff !important; font-weight: 900; font-size: 0.95rem;">↩ الرجوع للخلف لتعديل المعلومات</span>
+                    </button>
+                }
+
+                @if (!IsPendingConfirmation)
+                {
+                    <button type="button" class="btn-primary-action" style="background: #16a34a; border-color: #15803d; color: #fff;" @onclick="ToggleWhatsAppModal">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                        </svg>
+                        <span>إرسال ملخص العقد بالواتساب</span>
+                    </button>
+                }
+            </div>
+
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button class="filter-pill" @onclick="HandleCloseOrBack">
+                    @(IsPendingConfirmation ? "إلغاء المعاينة" : "إغلاق")
+                </button>
+
+                @if (IsPendingConfirmation)
+                {
+                    <button class="btn-primary-action" style="background: #0284c7; border-color: #0369a1; font-weight: 900; font-size: 0.95rem; padding: 8px 22px; display: flex; align-items: center; gap: 8px;" @onclick="HandleConfirmAndPrint" disabled="@_isConfirming">
+                        @if (_isConfirming)
+                        {
+                            <span>جاري الاعتماد والحفظ...</span>
+                        }
+                        else
+                        {
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <path d="M20 6L9 17l-5-5"></path>
+                            </svg>
+                            <span>✓ تأكيد العقد والطباعة الرسمية (A4)</span>
+                        }
+                    </button>
+                }
+                else
+                {
+                    <button class="btn-primary-action" @onclick="PrintDocument">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                            <rect x="6" y="14" width="12" height="8"></rect>
+                        </svg>
+                        <span>
+                            @(_currentDoc switch {
+                                "contract_both" => "طباعة العقد وجه وقفا (صفحة A4 كاملة)",
+                                "contract_front" => "طباعة وجه العقد فقط (صفحة 1)",
+                                "contract_back" => "طباعة قفا العقد فقط (شروط التأجير)",
+                                "note" => "طباعة كمبيالة الضمان الرسمية",
+                                "inspection" => "طباعة محضر المعاينة والفحص",
+                                "receipt" => "طباعة سند القبض المالي الرسمي (A4)",
+                                "payment" => "طباعة سند الصرف المالي الرسمي (A4)",
+                                _ => "طباعة المستند فورياً (A4)"
+                            })
+                        </span>
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    [Parameter] public Contract? Contract { get; set; }
+    [Parameter] public bool InitialTabContract { get; set; } = true;
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    // دعم الرجوع وتعديل البيانات قبل الاعتماد أو التراجع عن العقد الجديد
+    [Parameter] public bool IsPendingConfirmation { get; set; } = false;
+    [Parameter] public bool CanRollbackNewContract { get; set; } = false;
+    [Parameter] public EventCallback OnBackToEdit { get; set; }
+    [Parameter] public EventCallback OnConfirmContract { get; set; }
+
+    private bool _isConfirming = false;
+
+    private async Task HandleBackToEdit()
+    {
+        if (OnBackToEdit.HasDelegate)
+        {
+            await OnBackToEdit.InvokeAsync();
+        }
+        else
+        {
+            await OnClose.InvokeAsync();
+        }
+    }
+
+    private async Task HandleCloseOrBack()
+    {
+        if (IsPendingConfirmation)
+        {
+            await HandleBackToEdit();
+        }
+        else
+        {
+            await OnClose.InvokeAsync();
+        }
+    }
+
+    private async Task HandleConfirmAndPrint()
+    {
+        if (_isConfirming) return;
+        _isConfirming = true;
+        try
+        {
+            if (OnConfirmContract.HasDelegate)
+            {
+                await OnConfirmContract.InvokeAsync();
+            }
+            await PrintDocument();
+        }
+        finally
+        {
+            _isConfirming = false;
+        }
+    }
+
+    private string _currentDoc = "contract_both";
+    private string _selectedCompany = "samara"; // "samara" or "altaj"
+    private CompanyProfile? _companyProfile;
+    private bool _showWhatsAppModal = false;
+    private string _whatsAppPrefix = "970";
+    private string _whatsAppPhone = "";
+
+    // Voucher Print State
+    private decimal _voucherAmount = 0;
+    private string _voucherNotes = "";
+    private string _voucherRecipient = "";
+
+    private void SelectDocument(string doc)
+    {
+        _currentDoc = doc;
+        if (doc == "receipt" && Contract != null)
+        {
+            _voucherAmount = Contract.PaidAmount;
+            _voucherRecipient = Contract.Customer?.FullName ?? "";
+            _voucherNotes = $"دفعة مالية معتمدة لتأجير مركبة سياحية بموجب العقد رقم ({Contract.ContractNumber})";
+        }
+        else if (doc == "payment" && Contract != null)
+        {
+            _voucherAmount = Contract.PaidAmount > 0 ? Contract.PaidAmount : 0;
+            _voucherRecipient = Contract.Customer?.FullName ?? "";
+            _voucherNotes = $"استرداد مالي / رد رصيد عن عقد التأجير رقم ({Contract.ContractNumber})";
+        }
+    }
+
+    // Company Presets
+    private string ActiveCompanyNameAr => _selectedCompany == "samara" 
+        ? "شركة سمارة" 
+        : "شركة التاج";
+
+    private string ActiveCompanySubtitleAr => "لتأجير السيارات السياحية";
+
+    private string ActiveCompanyNameEn => _selectedCompany == "samara" 
+        ? "SAMARA Rental Company" 
+        : "ALTAJ Rental Company";
+
+    private string ActiveCompanySubtitleEn => "Tourist Car Rental";
+
+    private string ActiveCompanyDealerNo => _selectedCompany == "samara" 
+        ? "562171389" 
+        : "562514273";
+
+    private string ActiveCompanyAddressAr => "طوباس - قرب الصحة الجديدة";
+    private string ActiveCompanyAddressEn => "Tubas - near the new health";
+    private string ActiveCompanyPhones => "05 666 5555 0 | 0566 009 003";
+
+    private string ActiveCompanyBrandAr => _selectedCompany == "samara" ? "سـمـارة" : "الـتـاج";
+    private string ActiveCompanyBrandEn => _selectedCompany == "samara" ? "SAMARA" : "ALTAJ";
+
+    private List<VehicleDamageMark> _vehicleDamageMarks = new();
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _companyProfile = await RentalService.GetCompanyProfileAsync();
+            if (_companyProfile != null && !string.IsNullOrWhiteSpace(_companyProfile.CompanyName))
+            {
+                if (_companyProfile.CompanyName.Contains("تاج") || _companyProfile.CompanyName.ToLower().Contains("taj"))
+                {
+                    _selectedCompany = "altaj";
+                }
+                else if (_companyProfile.CompanyName.Contains("سمارة") || _companyProfile.CompanyName.ToLower().Contains("samara"))
+                {
+                    _selectedCompany = "samara";
+                }
+            }
+        }
+        catch { }
+
+        await LoadVehicleDamageMarksAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _currentDoc = InitialTabContract ? "contract_both" : "note";
+        if (Contract != null)
+        {
+            _voucherAmount = Contract.PaidAmount;
+            _voucherRecipient = Contract.Customer?.FullName ?? "";
+            _voucherNotes = $"دفعة مالية معتمدة لتأجير مركبة سياحية بموجب العقد رقم ({Contract.ContractNumber})";
+        }
+        await LoadVehicleDamageMarksAsync();
+    }
+
+    private async Task LoadVehicleDamageMarksAsync()
+    {
+        try
+        {
+            if (Contract?.VehicleId != null && Contract.VehicleId != Guid.Empty)
+            {
+                var vehicle = await RentalService.GetVehicleByIdAsync(Contract.VehicleId);
+                if (vehicle != null)
+                {
+                    _vehicleDamageMarks = vehicle.GetDamageMarks().Where(m => !m.IsRepaired).ToList();
+                    return;
+                }
+            }
+
+            if (Contract?.Vehicle != null)
+            {
+                _vehicleDamageMarks = Contract.Vehicle.GetDamageMarks().Where(m => !m.IsRepaired).ToList();
+            }
+        }
+        catch { }
+    }
+
+    private string GetViewArabicName(string? view) => (view ?? "").ToLower().Trim() switch
+    {
+        "front" => "أمامي",
+        "side" => "جانبي",
+        "rear" => "خلفي",
+        "persp_front" => "مجسم أمامي",
+        "persp_rear" => "مجسم خلفي",
+        _ => "المخطط الشامل"
+    };
+
+    private (double X, double Y) GetUniversalMarkCoordinates(VehicleDamageMark mark)
+    {
+        return VehicleInspectionCoordinates.ToUniversalCoordinates(mark);
+    }
+
+    private int GetRentalDurationDays()
+    {
+        if (Contract == null) return 1;
+        if (Contract.IsOpenEnded)
+        {
+            return Contract.OpenRentalDays;
+        }
+        var days = (int)Math.Ceiling((Contract.ExpectedReturnDateTime - Contract.StartDateTime).TotalDays);
+        return Math.Max(1, days);
+    }
+
+    private async Task PrintDocument()
+    {
+        await JSRuntime.InvokeVoidAsync("window.printDocumentArea", "printableContractContainer", "A4");
+    }
+
+    private void ToggleWhatsAppModal()
+    {
+        _showWhatsAppModal = !_showWhatsAppModal;
+        if (_showWhatsAppModal && string.IsNullOrWhiteSpace(_whatsAppPhone))
+        {
+            _whatsAppPhone = Contract?.Customer?.PrimaryPhone ?? "";
+        }
+    }
+
+    private string GetContractWhatsAppMessage()
+    {
+        if (Contract == null) return string.Empty;
+
+        var custName = Contract.Customer?.FullName ?? "العميل المحترم";
+        var carBrand = Contract.Vehicle?.Brand ?? "";
+        var carModel = Contract.Vehicle?.Model ?? "";
+        var plate = Contract.Vehicle?.PlateNumber ?? "";
+        var startStr = Contract.StartDateTime.ToString("yyyy/MM/dd hh:mm tt");
+        var returnStr = Contract.IsOpenEnded 
+            ? "عقد مفتوح (حساب يومي مستمر حسب طلب العميل)" 
+            : $"{Contract.ExpectedReturnDateTime:yyyy/MM/dd hh:mm tt} ({GetRentalDurationDays()} يوم)";
+        var days = GetRentalDurationDays();
+        var dailyRate = Contract.DailyAgreedRate.ToString("N0");
+        var total = Contract.IsOpenEnded 
+            ? $"{Contract.OpenRentalAccruedAmount:N0} ₪ (مستحق حتى اللحظة)" 
+            : $"{Contract.TotalAgreedAmount:N0} ₪";
+        var paid = Contract.PaidAmount.ToString("N0");
+        var remaining = Contract.IsOpenEnded 
+            ? $"{Contract.OpenRentalCurrentDue:N0} ₪" 
+            : $"{Contract.RemainingAmount:N0} ₪";
+
+        var msg = $"✦ *شركة التـاج لتأجيـر السيـارات* (TAJ SYSTEM) ✦\n" +
+                  $"━━━━━━━━━━━━━━━━━━━━━\n" +
+                  $"مرحباً بك أخي الكريم: *{custName}*\n" +
+                  $"تم توثيق عقد الإيجار الرسمي برقم: *{Contract.ContractNumber}* {(Contract.IsOpenEnded ? "(عقد مفتوح)" : "")}\n\n" +
+                  $"▪ *المركبة:* {carBrand} {carModel} (لوحة: *{plate}*)\n" +
+                  $"▪ *موعد الاستلام:* {startStr}\n" +
+                  $"▪ *موعد الإرجاع:* {returnStr}\n" +
+                  $"▪ *الأجرة اليومية:* {dailyRate} ₪\n";
+
+        if (Contract.DiscountAmount > 0)
+        {
+            msg += $"▪ *السعر قبل الخصم:* {Contract.OriginalAgreedAmount:N0} ₪ | *الخصم:* -{Contract.DiscountAmount:N0} ₪ {(Contract.DiscountType == "Percentage" ? $"({Contract.DiscountValue}%)" : "")}\n";
+        }
+
+        msg += $"▪ *الحساب المالي:* {(Contract.IsOpenEnded ? "المستحق حالياً" : "الإجمالي")}: *{total}* | المدفوع: *{paid} ₪* | المتبقي: *{remaining}*\n";
+
+        if (!string.IsNullOrWhiteSpace(Contract.AdditionalDriverName))
+        {
+            msg += $"▪ *السائق الإضافي المعتمد:* {Contract.AdditionalDriverName}\n";
+        }
+
+        msg += $"━━━━━━━━━━━━━━━━━━━━━\n" +
+               $"نتمنى لكم رحلة آمنة وموفقة بإذن الله\n" +
+               $"☎ *خدمة العملاء:* 0566655550 | 0566009003";
+
+        return msg;
+    }
+
+    private async Task CopyContractWhatsApp()
+    {
+        var msg = GetContractWhatsAppMessage();
+        try
+        {
+            System.Windows.Clipboard.SetText(msg);
+            await JSRuntime.InvokeVoidAsync("alert", "تم نسخ نص رسالة العقد بنجاح إلى الحافظة! يمكنك لصقها الآن في محادثة واتساب.");
+        }
+        catch { }
+    }
+
+    private void SendContractWhatsApp()
+    {
+        if (Contract == null || string.IsNullOrWhiteSpace(_whatsAppPhone)) return;
+
+        var msg = GetContractWhatsAppMessage();
+        WhatsAppHelper.OpenWhatsApp(_whatsAppPhone, _whatsAppPrefix, msg);
+        _showWhatsAppModal = false;
+    }
+}
+
+<style>
+    .btn-back-to-edit {
+        transition: all 0.2s ease;
+    }
+    .btn-back-to-edit:hover {
+        background: linear-gradient(135deg, #b45309 0%, #92400e 100%) !important;
+        box-shadow: 0 6px 16px rgba(180, 83, 9, 0.45) !important;
+        transform: translateY(-1px);
+    }
+    .btn-back-to-edit:active {
+        transform: translateY(0);
+    }
+</style>
