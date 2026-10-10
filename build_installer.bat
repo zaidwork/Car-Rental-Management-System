@@ -36,7 +36,9 @@ if "%ISCC_PATH%"=="" (
     exit /b 1
 )
 
-echo [1/3] جاري فحص ونشر ملفات النظام ذاتياً (Self-Contained Release win-x64)...
+echo [1/3] تنظيف مجلدات التجميع القديمة ونشر ملفات النظام ذاتياً (Clean Self-Contained Release win-x64)...
+if exist "dist\win-x64" rmdir /s /q "dist\win-x64"
+dotnet clean src\CarRental.App\CarRental.App.csproj -c Release >nul 2>&1
 dotnet publish src\CarRental.App\CarRental.App.csproj -c Release -r win-x64 --self-contained true -o dist\win-x64
 if %ERRORLEVEL% neq 0 (
     echo [خطأ] فشلت عملية النشر (dotnet publish).

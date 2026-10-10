@@ -29,11 +29,16 @@ public partial class MainWindow : Window
             catch { }
         };
 
-        blazorWebView.BlazorWebViewInitialized += (s, e) =>
+        blazorWebView.BlazorWebViewInitialized += async (s, e) =>
         {
             try
             {
                 blazorWebView.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(246, 243, 235);
+                if (blazorWebView.WebView?.CoreWebView2 != null)
+                {
+                    await blazorWebView.WebView.CoreWebView2.Profile.ClearBrowsingDataAsync(
+                        Microsoft.Web.WebView2.Core.CoreWebView2BrowsingDataKinds.DiskCache);
+                }
             }
             catch { }
         };

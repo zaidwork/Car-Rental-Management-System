@@ -37,7 +37,7 @@ public static class AppPaths
         // ضبط مسار WebView2 الآمن وبيئة التشغيل الفائقة لمنع التعليق والشاشة البيضاء
         Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", WebView2DataDirectory);
         Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", 
-            "--no-first-run --disable-background-networking --disable-sync --disable-features=Translate,AutofillServerCommunication,OptimizationHints,msWebOOUI,msPdfOOUI --disable-component-update --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-extensions");
+            "--no-first-run --disable-background-networking --disable-sync --disable-features=Translate,AutofillServerCommunication,OptimizationHints,msWebOOUI,msPdfOOUI --disable-component-update --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-extensions --disk-cache-size=0 --disable-application-cache");
 
         MigrateLegacyDatabaseIfNeeded();
     }

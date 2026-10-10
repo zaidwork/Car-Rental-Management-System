@@ -12,6 +12,8 @@
 #define MyAppExeName "CarRental.App.exe"
 #define MyAppId "{{7D2E68B4-9F81-4C5C-A77E-8F1A20D75630}"
 
+#define MyAppVersionNum "4.0.0.0"
+
 [Setup]
 AppId={#MyAppId}
 AppName={#MyAppName}
@@ -22,6 +24,11 @@ AppPublisherURL={#MyAppPublisherEmail}
 AppSupportPhone={#MyAppPublisherPhone}
 AppContact={#MyAppPublisherEmail}
 AppCopyright={#MyAppCopyright}
+VersionInfoVersion={#MyAppVersionNum}
+VersionInfoTextVersion={#MyAppVersion}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoDescription={#MyAppName}
+VersionInfoCopyright={#MyAppCopyright}
 DefaultDirName={autopf}\CarRentalSystem
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
@@ -51,10 +58,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "cleandb"; Description: "تصفير وتثبيت قاعدة بيانات نظيفة وجديدة (السيارات والزبائن المسجلين فقط وبدون أي عمليات سابقة)"; GroupDescription: "خيارات تهيئة النظام"; Flags: unchecked
 
 [InstallDelete]
-; تنظيف كافة الملفات التنفيذية والمكتبات القديمة قبل نسخ الإصدار الجديد لمنع أي تعارض
-Type: files; Name: "{app}\*.dll"
-Type: files; Name: "{app}\*.exe"
-Type: files; Name: "{app}\*.pdb"
+; حذف كافة الملفات والمجلدات السابقة من مجلد التثبيت قبل نسخ الجديد
+Type: filesandordirs; Name: "{app}\*"
+; حذف كاش محرك WebView2 والملفات المؤقتة لضمان تشغيل الواجهة الجديدة بنسبة 100% بدون أي مخلفات قديمة
+Type: filesandordirs; Name: "{localappdata}\CarRentalSystem\WebView2Data"
+Type: filesandordirs; Name: "{localappdata}\CarRentalSystem\Logs"
 
 [Files]
 ; تضمين كافة ملفات وحزم التطبيق المنشورة ذاتياً (Self-Contained x64)
@@ -77,6 +85,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 [UninstallDelete]
 ; تنظيف الملفات المؤقتة واللوجات عند إلغاء التثبيت
 Type: filesandordirs; Name: "{app}\Logs"
+Type: filesandordirs; Name: "{localappdata}\CarRentalSystem\WebView2Data"
 
 [Code]
 // وظيفة استخراج مسار إلغاء تثبيت النسخة السابقة من سجل ويندوز
@@ -101,16 +110,30 @@ begin
   Result := '';
   NeedsRestart := False;
 
-  // 1. إغلاق أي نافذة أو عملية نشطة للبرنامج لفك قفل الملفات قبل التثبيت
+  // 1. إنهاء أي عملية قيد التشغيل للبرنامج ولمتصفح WebView2 لفك قفل الملفات
   Exec('taskkill.exe', '/f /im {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, iResultCode);
-  Sleep(400);
+  Exec('taskkill.exe', '/f /im msedgewebview2.exe', '', SW_HIDE, ewWaitUntilTerminated, iResultCode);
+  Sleep(500);
 
-  // 2. إذا كانت هناك نسخة سابقة مثبتة، يتم تشغيل برنامج إلغاء التثبيت صامتاً لحذف الملفات القديمة
+  // 2. إذا كانت هناك نسخة سابقة مثبتة، يتم تشغيل برنامج إلغاء التثبيت صامتاً لحذف الملفات والروابط القديمة
   sUnInstallString := GetPriorUninstallString();
   if sUnInstallString <> '' then
   begin
     sUnInstallString := RemoveQuotes(sUnInstallString);
     Exec(sUnInstallString, '/VERYSILENT /NORESTART /SUPPRESSMSGBOXES', '', SW_HIDE, ewWaitUntilTerminated, iResultCode);
-    Sleep(800);
+    Sleep(1000);
+  end;
+
+  // 3. حذف كاش المتصفح القديم
+  DelTree(ExpandConstant('{localappdata}\CarRentalSystem\WebView2Data'), True, True, True);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+  begin
+    // تفريغ مجلد التثبيت تماماً من أي ملفات قديمة ومسح كاش المتصفح قبل نسخ الملفات الجديدة
+    DelTree(ExpandConstant('{app}'), True, True, True);
+    DelTree(ExpandConstant('{localappdata}\CarRentalSystem\WebView2Data'), True, True, True);
   end;
 end;
