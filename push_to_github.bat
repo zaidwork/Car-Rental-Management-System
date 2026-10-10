@@ -1,34 +1,39 @@
 @echo off
-chcp 65001 >nul
+title Push to GitHub - Car Rental Management System
 cls
-echo ===============================================================================
-echo     رفع مشروع تأجير السيارات إلى GitHub (Car-Rental-Management-System)
-echo ===============================================================================
+echo ===================================================
+echo   Pushing Car Rental Management System to GitHub
+echo ===================================================
 echo.
-set "PATH=C:\Program Files\Git\cmd;%PATH%"
 
-echo [1/3] التحقق من حالة المستودع والملفات الجاهزة...
-git status --short
+set "GIT_EXE=C:\Program Files\Git\cmd\git.exe"
+set "PATH=C:\Program Files\Git\cmd;C:\Program Files\Git\mingw64\bin;%PATH%"
 
+if not exist "%GIT_EXE%" (
+    echo [ERROR] Git was not found at %GIT_EXE%
+    pause
+    exit /b 1
+)
+
+echo [1/2] Checking Git repository status...
+"%GIT_EXE%" status --short
 echo.
-echo [2/3] جاري الرفع إلى GitHub: https://github.com/zaidwork/Car-Rental-Management-System.git ...
-echo -------------------------------------------------------------------------------
-echo إذا فتحت نافذة GitHub في المتصفح أو نافذة منبثقة، اضغط (Sign in with your browser)
-echo -------------------------------------------------------------------------------
-echo.
-git push -u origin main
+
+echo [2/2] Pushing branch main to GitHub origin...
+"%GIT_EXE%" push -u origin main
 
 if %ERRORLEVEL% equ 0 (
     echo.
-    echo ===============================================================================
-    echo [نجاح تام] تم رفع المشروع بالكامل إلى GitHub بنجاح!
-    echo رابط المستودع: https://github.com/zaidwork/Car-Rental-Management-System
-    echo ===============================================================================
+    echo ===================================================
+    echo [SUCCESS] Project uploaded successfully to GitHub!
+    echo https://github.com/zaidwork/Car-Rental-Management-System
+    echo ===================================================
 ) else (
     echo.
-    echo ===============================================================================
-    echo فشلت عملية الرفع أو تم إلغاؤها. يرجى التأكد من صلاحيات الحساب أو الرمز.
-    echo ===============================================================================
+    echo ===================================================
+    echo [ERROR] Push failed. Return code: %ERRORLEVEL%
+    echo If a browser window opened, please complete sign-in.
+    echo ===================================================
 )
 
 echo.
