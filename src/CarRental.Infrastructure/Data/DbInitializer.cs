@@ -576,6 +576,23 @@ public static class DbInitializer
             }
             catch { }
 
+            // إصلاح وتعديل العقود المفتوحة النشطة لضمان عدم اعتبارها متأخرة إطلاقاً
+            try
+            {
+                var activeOpenContracts = await context.Contracts
+                    .Where(c => c.Status == ContractStatus.Active && c.IsOpenEnded)
+                    .ToListAsync();
+
+                foreach (var c in activeOpenContracts)
+                {
+                    if (c.ExpectedReturnDateTime < DateTime.Now.AddYears(1))
+                    {
+                        c.ExpectedReturnDateTime = DateTime.Now.AddYears(10);
+                    }
+                }
+            }
+            catch { }
+
             await context.SaveChangesAsync();
             return;
         }

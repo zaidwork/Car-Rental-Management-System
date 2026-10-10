@@ -1594,7 +1594,7 @@ public class RentalSystemService : IRentalSystemService
             .AsNoTracking()
             .Include(c => c.Customer)
             .Include(c => c.Vehicle)
-            .Where(c => c.Status == ContractStatus.Active && c.ExpectedReturnDateTime < now)
+            .Where(c => c.Status == ContractStatus.Active && !c.IsOpenEnded && c.ExpectedReturnDateTime < now)
             .ToListAsync();
 
         return overdue.Select(c => new OverdueContractDto

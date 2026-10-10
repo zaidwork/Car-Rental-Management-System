@@ -73,7 +73,7 @@ public class NotificationService : INotificationService
                 .AsNoTracking()
                 .Include(c => c.Customer)
                 .Include(c => c.Vehicle)
-                .Where(c => c.Status == ContractStatus.Active && c.ExpectedReturnDateTime < now)
+                .Where(c => c.Status == ContractStatus.Active && !c.IsOpenEnded && c.ExpectedReturnDateTime < now)
                 .OrderBy(c => c.ExpectedReturnDateTime)
                 .ToListAsync();
 
